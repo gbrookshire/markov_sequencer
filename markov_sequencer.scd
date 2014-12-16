@@ -5,45 +5,16 @@ Push buttons multiple times to give higher probabilities.
 
 (
 var trans_matrix, node_functions;
-var win;
-var button_width, button_spacing, window_size, button_states;
+var win, window_size;
+var ind_size, inds; // indicator buttons
+var play_button;
+var b_width, b_space, b_states; // button variables
 
-node_functions = [60, 65, 67, 70, 75, 80];
+node_functions = [55, 60, 65, 67, 70, 75, 77, 80];
 n = node_functions.size;
 ~transition_mat = Array2D.fromArray(n, n, Array.fill(n * n, 0));
 
-///////////////////////// Set up GUI
-button_width = 40;
-button_spacing = 6;
-window_size = (button_width + button_spacing + 1) * n;
-win = GUI.window.new("Transition matrix",
-	Rect(100, 100, window_size, window_size));
-win.view.background = Color(0.15,0.15,0.1);
-win.front;
-
-// Buttons have multiple states, corresponding to transition probabilities.
-button_states = [[" ", Color.white, Color.black],
-	[" ", Color.white, Color.grey(0.4)],
-	[" ", Color.white, Color.grey(0.7)],
-	[" ", Color.white, Color.white]];
-
-(n * n).do({arg i;
-	var col, row, xpos, ypos;
-	row = floor(i / n);
-	col = mod(i, n);
-	xpos = col * (button_width + button_spacing) + button_spacing;
-	ypos = row * (button_width + button_spacing) + button_spacing;
-	b = GUI.button.new(win, Rect(xpos, ypos, button_width, button_width));
-	b.states = button_states;
-	b.action = {|b|
-		var old_val, new_val;
-		old_val = ~transition_mat.at(row, col);
-		new_val = mod(old_val + 1, button_states.size);
-		~transition_mat.put(row, col, new_val);
-	};
-});
-
-///////////////////////// Set up the synth
+///////////////////////// Set up the synths
 SynthDef(\singrain, { |freq = 440, amp = 0.2, sustain = 1|
 	var sig, env;
 	env = EnvGen.kr(Env.perc(0.01, sustain), doneAction: 2);
@@ -55,12 +26,67 @@ SynthDef(\singrain, { |freq = 440, amp = 0.2, sustain = 1|
 		[freq: freq, amp: rrand(0.1, 0.5), sustain: 2])
 };
 
+///////////////////////// Set up GUI
+b_width = 40;
+b_space = 6;
+ind_size = 18;
+window_size = ind_size + b_space + ((b_width + b_space + 1) * n);
+win = GUI.window.new("Transition matrix",
+	Rect(100, 100, window_size, window_size));
+win.view.background = Color(0.15,0.15,0.1);
+win.front;
+
+// Make a function button
+play_button = GUI.button.new(win,
+	Rect(b_width,
+		3, ind_size, ind_size));
+play_button.states = [[">", Color.black, Color.grey],
+	["||", Color.white, Color.black]];
+play_button.action = {
+	if (play_button.value == 0,
+		{t.stop;},
+		{t.play;}
+)};
+
+// // Make indicator buttons
+// inds = Array.fill(n, {|i|
+// 	var xpos, ypos;
+// 	xpos = 3;
+// 	ypos = (i * (b_width + b_space)) + (0.8 * b_width);
+// 	b = GUI.button.new(win, Rect(xpos, ypos, ind_size, ind_size));
+// 	b.states = [[" ", Color.white, Color.black],
+// 	[" ", Color.white, Color.white]];
+// 	b.action = {|b, i| ~ping.value(node_functions[i])};
+// });
+
+// Buttons have multiple states, corresponding to transition probabilities.
+b_states = [[" ", Color.white, Color.black],
+	[" ", Color.white, Color.grey(0.4)],
+	[" ", Color.white, Color.grey(0.7)],
+	[" ", Color.white, Color.white]];
+
+(n * n).do({arg i;
+	var col, row, xpos, ypos;
+	row = floor(i / n);
+	col = mod(i, n);
+	xpos = (col * (b_width + b_space)) + b_space + ind_size + b_space;
+	ypos = (row * (b_width + b_space)) + b_space + ind_size + b_space;
+	b = GUI.button.new(win, Rect(xpos, ypos, b_width, b_width));
+	b.states = b_states;
+	b.action = {|b|
+		var old_val, new_val;
+		old_val = ~transition_mat.at(row, col);
+		new_val = mod(old_val + 1, b_states.size);
+		~transition_mat.put(row, col, new_val);
+	};
+});
+
 ///////////////////////// Run the sequencer
 t = Task({
 	var delta, current_state, next_state, probs, freq, pass;
 	current_state = 0;
 	loop {
-		delta = 0.5;
+		delta = 0.2;
 		freq = node_functions[current_state].midicps;
 		probs = ~transition_mat.rowAt(current_state);
 
@@ -78,7 +104,7 @@ t = Task({
 				current_state = 0;
 				t.pause;
 			}, {
-				~ping.value(freq)
+				~ping.value(freq); // Play sound
 			}
 		);
 		delta.yield; // Time until the next iteration
