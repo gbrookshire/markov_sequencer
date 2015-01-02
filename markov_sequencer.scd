@@ -10,8 +10,11 @@ var ind_size, inds; // indicator buttons
 var play_button;
 var b_width, b_space, b_states; // button variables
 
-node_functions = [55, 60, 65, 67, 70, 75, 77, 80];
+var net = NetAddr("127.0.0.1", 9000); // Send OSC to Processing here.
+
+node_functions = [55, 60, 65, 67, 70, 75];
 n = node_functions.size;
+net.sendMsg("s_new", \n_elem, n);
 ~transition_mat = Array2D.fromArray(n, n, Array.fill(n * n, 0));
 
 ///////////////////////// Set up the synths
@@ -75,9 +78,12 @@ b_states = [[" ", Color.white, Color.black],
 	b.states = b_states;
 	b.action = {|b|
 		var old_val, new_val;
+		var tmat_size = 0;
 		old_val = ~transition_mat.at(row, col);
 		new_val = mod(old_val + 1, b_states.size);
 		~transition_mat.put(row, col, new_val);
+		// Send the size of the transition matrix to processing
+		// net.sendMsg("s_new", \length, tmat_size);
 	};
 });
 
@@ -86,7 +92,7 @@ t = Task({
 	var delta, current_state, next_state, probs, freq, pass;
 	current_state = 0;
 	loop {
-		delta = 0.2;
+		delta = 0.5;
 		freq = node_functions[current_state].midicps;
 		probs = ~transition_mat.rowAt(current_state);
 
@@ -105,6 +111,7 @@ t = Task({
 				t.pause;
 			}, {
 				~ping.value(freq); // Play sound
+				net.sendMsg("s_new", \next_state, next_state)
 			}
 		);
 		delta.yield; // Time until the next iteration
@@ -115,4 +122,4 @@ t = Task({
 t.play; // Execute to run
 t.pause; // Execute to stop
 t.stop;
-~transition_mat;
+~transition_mat.;
