@@ -3,6 +3,75 @@ A Markovian sequencer. The grid of buttons shows a transition matrix.
 Push buttons multiple times to give higher probabilities.
 */
 
+
+
+///////////////////////// Set up the synths
+(
+// var freq_mod_speed, freq_mod_depth;
+var win;
+// GUI to modulate parameters
+win = GUI.window.new("Transition matrix",
+	Rect(100, 100, 300, 100));
+win.view.background = Color(0.15,0.15,0.1);
+win.front;
+
+a = GUI.slider.new(win, Rect(10, 10, 30, 80));
+a.knobColor_(Color(1,1,0.51));
+a.background_(Color.grey);
+a.value_(1);
+a.action_({|view|
+	~freq_mod_speed = 800 * view.value;
+});
+
+a = GUI.slider.new(win, Rect(50, 10, 30, 80));
+a.knobColor_(Color(1,1,0.51));
+a.background_(Color.grey);
+a.value_(1);
+a.action_({|view|
+	~freq_mod_depth = 100 * view.value;
+});
+
+a = GUI.slider.new(win, Rect(90, 10, 30, 80));
+a.knobColor_(Color(1,1,0.51));
+a.background_(Color.grey);
+a.value_(1);
+a.action_({|view|
+	~click_rate = 100 * view.value;
+});
+
+~freq_mod_speed = 600;
+~freq_mod_depth = 50;
+~click_rate = 10;
+
+SynthDef(\singrain, { |freq = 440, amp = 0.2, sustain = 1,
+	fms=100, fmd=100, bit_click_rate=10|
+	var sig, env;
+	var freq_mod;
+
+	freq_mod = LFNoise0.kr(freq:fms, mul:fmd);
+
+	env = EnvGen.kr(Env.perc(0.01, sustain), doneAction:2);
+	sig = SinOsc.ar(freq + freq_mod, mul:amp);
+	sig = sig * LFNoise0.ar(bit_click_rate);
+	sig = sig * env;
+	Out.ar(0, sig ! 2);
+}).add;
+
+~ping = {|freq|
+	x = Synth(\singrain,
+		[freq:freq, amp:rrand(0.1, 0.5), sustain:2]);
+	x.set("fms", ~freq_mod_speed);
+	x.set("fmd", ~freq_mod_depth);
+	x.set("bit_click_rate", ~click_rate);
+};
+
+)
+
+// I can set values of other parameters, why not of the freq mod speed?
+x.set("freq", 1000);
+x.set("amp", 0);
+x.set("fms", 10);
+
 (
 var trans_matrix, node_functions;
 var win, window_size;
@@ -17,17 +86,6 @@ n = node_functions.size;
 net.sendMsg("s_new", \n_elem, n);
 ~transition_mat = Array2D.fromArray(n, n, Array.fill(n * n, 0));
 
-///////////////////////// Set up the synths
-SynthDef(\singrain, { |freq = 440, amp = 0.2, sustain = 1|
-	var sig, env;
-	env = EnvGen.kr(Env.perc(0.01, sustain), doneAction: 2);
-	sig = SinOsc.ar(freq, 0, amp) * env;
-	Out.ar(0, sig ! 2);
-}).add;
-~ping = {|freq|
-	Synth(\singrain,
-		[freq: freq, amp: rrand(0.1, 0.5), sustain: 2])
-};
 
 ///////////////////////// Set up GUI
 b_width = 40;
