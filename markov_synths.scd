@@ -41,6 +41,7 @@ SynthDef(\singrain, { |freq = 440, amp = 0.2, sustain = 1,
 	Out.ar(0, sig ! 2);
 }).add;
 
+// Here's the function that gets triggered by the sequencer.
 ~ping = {|freq|
 	x = Synth(\singrain,
 		[freq:freq, amp:rrand(0.1, 0.5), sustain:2]);
