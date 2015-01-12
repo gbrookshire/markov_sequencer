@@ -3,20 +3,27 @@ A Markovian sequencer. The grid of buttons shows a transition matrix.
 Push buttons multiple times to give higher probabilities.
 */
 
-
 (
-var trans_matrix, node_functions;
+var trans_matrix;
 var win, window_size;
 var ind_size, inds; // indicator buttons
 var play_button;
-var b_width, b_space, b_states; // button variables
+var b_width, b_space, b_states, button_grid; // button variables
 
-var net = NetAddr("127.0.0.1", 9000); // Send OSC to Processing here.
+var adrs_P5 = NetAddr("127.0.0.1", 9000); // Send OSC to Processing.
+var adrs_touchOSC = NetAddr("192.168.1.102", 58100); // Receive from TouchOSC
+var responders, touchOSC_msg, msg_in, msg_out;
 
-node_functions = [55, 60, 65, 67, 70, 75];
-n = node_functions.size;
-net.sendMsg("s_new", \n_elem, n);
-~transition_mat = Array2D.fromArray(n, n, Array.fill(n * n, 0));
+n = ~node_functions.size;
+button_grid = Array.newClear(n ** 2);
+responders = Array.newClear(n ** 2);
+touchOSC_msg = Array.newClear(n ** 2);
+msg_in = Array.newClear(n ** 2);
+msg_out = Array.newClear(n ** 2);
+~transition_mat = Array2D.fromArray(n, n, Array.fill(n ** 2, 0));
+
+// Send the num of active elements to Processing
+adrs_P5.sendMsg("s_new", \n_nodes, n);
 
 
 ///////////////////////// Set up GUI
@@ -41,49 +48,64 @@ play_button.action = {
 		{t.play;}
 )};
 
-// // Make indicator buttons
-// inds = Array.fill(n, {|i|
-// 	var xpos, ypos;
-// 	xpos = 3;
-// 	ypos = (i * (b_width + b_space)) + (0.8 * b_width);
-// 	b = GUI.button.new(win, Rect(xpos, ypos, ind_size, ind_size));
-// 	b.states = [[" ", Color.white, Color.black],
-// 	[" ", Color.white, Color.white]];
-// 	b.action = {|b, i| ~ping.value(node_functions[i])};
-// });
-
 // Buttons have multiple states, corresponding to transition probabilities.
 b_states = [[" ", Color.white, Color.black],
 	[" ", Color.white, Color.grey(0.4)],
 	[" ", Color.white, Color.grey(0.7)],
 	[" ", Color.white, Color.white]];
 
-(n * n).do({arg i;
+// Loop through and create the grid of buttons
+(n ** 2).do({arg i;
 	var col, row, xpos, ypos;
 	row = floor(i / n);
 	col = mod(i, n);
+
+	// Create the messages.
+	// The TouchOSC example had two messages, but they look identical...?
+	msg_in.put(i,
+		("/4/multitoggle/" ++ row.asString ++ "/" ++ col.asString));
+	msg_out.put(i,
+		('/4/multitoggle/' ++ row.asString ++ '/' ++ col.asString));
+
 	xpos = (col * (b_width + b_space)) + b_space + ind_size + b_space;
 	ypos = (row * (b_width + b_space)) + b_space + ind_size + b_space;
 	b = GUI.button.new(win, Rect(xpos, ypos, b_width, b_width));
 	b.states = b_states;
-	b.action = {|b|
+	b.action = {|view|
 		var old_val, new_val;
 		var tmat_size = 0;
 		old_val = ~transition_mat.at(row, col);
 		new_val = mod(old_val + 1, b_states.size);
 		~transition_mat.put(row, col, new_val);
-		// Send the size of the transition matrix to processing
-		// net.sendMsg("s_new", \length, tmat_size);
+
+		// Send the updated value to TouchOSC
+		adrs_touchOSC.sendMsg(msg_in[i], view.value);
 	};
+	button_grid.put(i, b);
+
+	// Initialize the responder nodes
+	responders.put(i,
+		OSCresponderNode(nil, msg_out[i], {|t, r, msg|
+			{button_grid[i].value = msg[1]}.defer;
+	}).add);
+
 });
 
 ///////////////////////// Run the sequencer
 t = Task({
-	var delta, current_state, next_state, probs, freq, pass;
+	var delta, current_state, next_state, probs, freq, pass, tmat_str;
 	current_state = 0;
 	loop {
-		delta = 0.5;
-		freq = node_functions[current_state].midicps;
+
+		// Send a string of the transition matrix to Processing
+		// Format: "1,2,3;4,5,6;7,8,9;"
+		tmat_str = "";
+		~transition_mat.rowsDo({|subarray|
+			tmat_str = tmat_str ++ subarray.join(',') ++ ';'});
+		adrs_P5.sendMsg("s_new", \trans_mat, tmat_str);
+
+		delta = 0.2; // Time delay until next iteration
+		freq = ~node_functions[current_state];
 		probs = ~transition_mat.rowAt(current_state);
 
 		// If there are no transitions here, stop the sequence.
@@ -101,15 +123,28 @@ t = Task({
 				t.pause;
 			}, {
 				~ping.value(freq); // Play sound
-				net.sendMsg("s_new", \next_state, next_state)
+				adrs_P5.sendMsg("s_new", \next_state, next_state)
 			}
 		);
 		delta.yield; // Time until the next iteration
 	}
 });
+
+
+// Remove responders when closing the window
+win.onClose_({
+	(responders.size).do({|i| responders[i].remove;});
+	t.stop;
+})
+
 )
 
 t.play; // Execute to run
 t.pause; // Execute to stop
 t.stop;
-~transition_mat.;
+
+(
+a = "";
+~transition_mat.rowsDo({|subarray| a = a ++ subarray.join('_') ++ ';'});
+a.postln;
+)

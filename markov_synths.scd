@@ -2,9 +2,11 @@
 var win;
 var param_vals, param_names, param_ranges;
 
+~node_functions = [55, 60, 65, 67, 70, 73, 75, 77];
+
 param_names = ["fms", "fmd", "bit_click_rate"];
 param_vals = [0, 0, 20/50];
-param_ranges = [100, 20, 50];
+param_ranges = [300, 100, 50];
 
 // GUI to modulate parameters
 win = GUI.window.new("Transition matrix",
@@ -29,22 +31,24 @@ param_names.do({|val, ind|
 
 SynthDef(\singrain, { |freq = 440, amp = 0.2, sustain = 1,
 	fms=100, fmd=100, bit_click_rate=10|
-	var sig, env;
-	var freq_mod;
+	var sig, env, freq_mod, out;
 
 	freq_mod = LFNoise0.kr(freq:fms, mul:fmd);
+	freq = freq + freq_mod;
 
 	env = EnvGen.kr(Env.perc(0.01, sustain), doneAction:2);
-	sig = SinOsc.ar(freq + freq_mod, mul:amp);
+	sig = SinOsc.ar(freq, mul:amp);
 	sig = sig * LFNoise0.ar(bit_click_rate);
-	sig = sig * env;
-	Out.ar(0, sig ! 2);
+	out = sig * env;
+
+	sig = FreeVerb.ar(out, mix:0.1);
+	Out.ar(0, out ! 2);
 }).add;
 
 // Here's the function that gets triggered by the sequencer.
 ~ping = {|freq|
 	x = Synth(\singrain,
-		[freq:freq, amp:rrand(0.1, 0.5), sustain:2]);
+		[freq:freq.midicps, amp:rrand(0.1, 0.5), sustain:2]);
 	param_names.do({|val, ind|
 		x.set(val, param_vals[ind] * param_ranges[ind]);
 	})
