@@ -104,7 +104,7 @@ t = Task({
 			tmat_str = tmat_str ++ subarray.join(',') ++ ';'});
 		adrs_P5.sendMsg("s_new", \trans_mat, tmat_str);
 
-		delta = 0.2; // Time delay until next iteration
+		delta = 60 / 140; // Time delay until next iteration
 		freq = ~node_functions[current_state];
 		probs = ~transition_mat.rowAt(current_state);
 
