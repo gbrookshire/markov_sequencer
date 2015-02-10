@@ -1,7 +1,18 @@
 /*
 A Markovian sequencer. The grid of buttons shows a transition matrix.
 Push buttons multiple times to give higher probabilities.
+
+On TouchOSC on the iPad:
+Port (outgoing): 57120
+Port (incoming): 58100
+
+To do:
+- Change to use the safer OSCFunc, instead of OSCResponderNode.
+
 */
+
+NetAddr.localAddr
+NetAddr.langPort
 
 (
 var trans_matrix;
@@ -11,9 +22,11 @@ var play_button;
 var b_width, b_space, b_states, button_grid; // button variables
 
 var adrs_P5 = NetAddr("127.0.0.1", 9000); // Send OSC to Processing.
-var adrs_touchOSC = NetAddr("192.168.1.102", 58100); // Receive from TouchOSC
-var responders, touchOSC_msg, msg_in, msg_out;
+var adrs_touchOSC = NetAddr("169.254.170.86", 58100); // Receive from TouchOSC
+var responders, trig_responder, touchOSC_msg, msg_in, msg_out;
+var current_state, next_state;
 
+current_state = 0;
 n = ~node_functions.size;
 button_grid = Array.newClear(n ** 2);
 responders = Array.newClear(n ** 2);
@@ -62,10 +75,10 @@ b_states = [[" ", Color.white, Color.black],
 
 	// Create the messages.
 	// The TouchOSC example had two messages, but they look identical...?
-	msg_in.put(i,
-		("/4/multitoggle/" ++ row.asString ++ "/" ++ col.asString));
+	// msg_in.put(i,
+	// ("/transmat/" ++ (row + 1).asString ++ "/" ++ (col + 1).asString));
 	msg_out.put(i,
-		('/4/multitoggle/' ++ row.asString ++ '/' ++ col.asString));
+		('/transmat/' ++ (row + 1).asString ++ '/' ++ (col + 1).asString));
 
 	xpos = (col * (b_width + b_space)) + b_space + ind_size + b_space;
 	ypos = (row * (b_width + b_space)) + b_space + ind_size + b_space;
@@ -79,54 +92,82 @@ b_states = [[" ", Color.white, Color.black],
 		~transition_mat.put(row, col, new_val);
 
 		// Send the updated value to TouchOSC
-		adrs_touchOSC.sendMsg(msg_in[i], view.value);
+		// adrs_touchOSC.sendMsg(msg_in[i], view.value);
+		adrs_touchOSC.sendMsg(msg_out[i], view.value);
 	};
 	button_grid.put(i, b);
 
 	// Initialize the responder nodes
 	responders.put(i,
-		OSCresponderNode(nil, msg_out[i], {|t, r, msg|
-			{button_grid[i].value = msg[1]}.defer;
-	}).add);
+		OSCdef.new(
+			'receiver'++msg_out[i],
+			{|msg, time, addr, port|
+				{button_grid[i].value = msg[1]}.defer;
+				// ~transition_mat.put(ROWNUM, COLNUM, msg[1]);
+			},
+			msg_out[i]
+		);
+	);
 
 });
 
-///////////////////////// Run the sequencer
+// Step through the transitions with p.value
+p = {|x|
+	var tmat_str, out_val, probs, pass;
+
+	// Send a string of the transition matrix to Processing
+	// Format: "1,2,3;4,5,6;7,8,9;"
+	tmat_str = "";
+	~transition_mat.rowsDo({|subarray|
+		tmat_str = tmat_str ++ subarray.join(',') ++ ';'});
+	adrs_P5.sendMsg("s_new", \trans_mat, tmat_str);
+
+	out_val = ~node_functions[current_state];
+	probs = ~transition_mat.rowAt(current_state);
+
+	// If there are no transitions here, do something
+	if (probs == Array.fill(probs.size, 0),
+		{pass = true}, {pass = false});
+
+	// Calculate probabilities and choose sound.
+	probs = probs / sum(probs);
+	next_state = (0..(n - 1)).wchoose(probs);
+	current_state = next_state;
+	if (pass,
+		{
+			'No transitions from this state.'.postln;
+			current_state = 0;
+			t.pause;
+		}, {
+			~ping.value(out_val); // Play sound
+			adrs_P5.sendMsg("s_new", \next_state, next_state);
+		}
+	);
+};
+
+// Set up trigger responder
+// OSCresponderNode(nil,
+// 	"/advance",
+// 	{|t, r, msg|
+// 		if (msg[1] == 1, {{p.value}.defer;}, {} );
+// }).add;
+
+OSCdef.new(
+	\advance_resp,
+	{|msg, time, addr, port|
+		if (msg[1] == 1, {{p.value}.defer;}, {} );
+	},
+	'/advance'
+);
+
+
+// To automatically step through the matrix, call t.play.
 t = Task({
-	var delta, current_state, next_state, probs, freq, pass, tmat_str;
-	current_state = 0;
+	var delta;
+	delta = 60 / 200; // Time until next iteration
 	loop {
-
-		// Send a string of the transition matrix to Processing
-		// Format: "1,2,3;4,5,6;7,8,9;"
-		tmat_str = "";
-		~transition_mat.rowsDo({|subarray|
-			tmat_str = tmat_str ++ subarray.join(',') ++ ';'});
-		adrs_P5.sendMsg("s_new", \trans_mat, tmat_str);
-
-		delta = 60 / 140; // Time delay until next iteration
-		freq = ~node_functions[current_state];
-		probs = ~transition_mat.rowAt(current_state);
-
-		// If there are no transitions here, stop the sequence.
-		if (probs == Array.fill(probs.size, 0),
-			{pass = true}, {pass = false});
-
-		// Calculate probabilities and choose sound.
-		probs = probs / sum(probs);
-		next_state = (0..(n - 1)).wchoose(probs);
-		current_state = next_state;
-		if (pass,
-			{
-				'empty'.postln;
-				current_state = 0;
-				t.pause;
-			}, {
-				~ping.value(freq); // Play sound
-				adrs_P5.sendMsg("s_new", \next_state, next_state)
-			}
-		);
-		delta.yield; // Time until the next iteration
+		p.value;
+		delta.yield;
 	}
 });
 
@@ -135,16 +176,28 @@ t = Task({
 win.onClose_({
 	(responders.size).do({|i| responders[i].remove;});
 	t.stop;
-})
+});
 
 )
 
 t.play; // Execute to run
 t.pause; // Execute to stop
-t.stop;
 
+// Listen for OSC triggers.
 (
-a = "";
-~transition_mat.rowsDo({|subarray| a = a ++ subarray.join('_') ++ ';'});
-a.postln;
-)
+f = { |msg, time, addr|
+	if((msg[0] == '/start') && (msg[1] == 1)) {
+        "yep".postln;
+    }
+};
+thisProcess.addOSCRecvFunc(f);
+);
+
+// stop posting.
+thisProcess.removeOSCRecvFunc(f);
+
+
+OSCFunc.trace(true); // Turn posting on
+OSCFunc.trace(false);
+
+~transition_mat

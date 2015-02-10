@@ -1,11 +1,40 @@
 (
+
+SynthDef(\singrain, { |freq = 440, amp = 0.2, sustain = 1,
+	fms=100, fmd=100, bit_click_rate=10|
+	var sig, env, freq_mod, out;
+	var bit_depth;
+
+	freq_mod = LFNoise0.kr(freq:fms, mul:fmd);
+	freq = freq + freq_mod;
+
+	env = EnvGen.kr(Env.perc(0.01, sustain), doneAction:2);
+	sig = SinOsc.ar(freq, mul:amp);
+	sig = sig * LFNoise0.ar(bit_click_rate);
+
+	// Reduce the sampling rate
+	sig = Latch.ar(sig, SinOsc.ar(LFNoise2.kr(freq:0.1, mul:5000, add:5000)));
+	// Reduce the bit depth
+	bit_depth = {10.rand + 1}.value;
+	sig = ((sig * (2 ** bit_depth)).round) / (2 ** bit_depth);
+
+	// Apply some reverb
+	sig = FreeVerb.ar(sig, mix:0.1);
+
+	out = sig * env;
+
+	Out.ar(0, out ! 2);
+}).add;
+)
+
+(
 var win;
 var param_vals, param_names, param_ranges;
 
 ~node_functions = [55, 60, 65, 67, 70, 73, 75, 77];
 
 param_names = ["fms", "fmd", "bit_click_rate"];
-param_vals = [0, 0, 20/50];
+param_vals = [0, 0, 0];
 param_ranges = [300, 100, 50];
 
 // GUI to modulate parameters
@@ -28,22 +57,6 @@ param_names.do({|val, ind|
 		param_vals[ind] = view.value;
 	});
 });
-
-SynthDef(\singrain, { |freq = 440, amp = 0.2, sustain = 1,
-	fms=100, fmd=100, bit_click_rate=10|
-	var sig, env, freq_mod, out;
-
-	freq_mod = LFNoise0.kr(freq:fms, mul:fmd);
-	freq = freq + freq_mod;
-
-	env = EnvGen.kr(Env.perc(0.01, sustain), doneAction:2);
-	sig = SinOsc.ar(freq, mul:amp);
-	sig = sig * LFNoise0.ar(bit_click_rate);
-	out = sig * env;
-
-	sig = FreeVerb.ar(out, mix:0.1);
-	Out.ar(0, out ! 2);
-}).add;
 
 // Here's the function that gets triggered by the sequencer.
 ~ping = {|freq|

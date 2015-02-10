@@ -13,7 +13,7 @@ fnames.do({|name|
 	~buffer_array = ~buffer_array ++ Buffer.read(s, samp_dir ++ name ++ ".wav");
 });
 
-SynthDef(\playBuf, {| out = 0, bufnum = 0, rate = 0.7 |
+SynthDef(\playBuf, {| out = 0, bufnum = 0, rate = 0.5 |
 	var scaledRate, player, trigs;
 	scaledRate = rate * BufRateScale.kr(bufnum);
 	player = PlayBuf.ar(1, bufnum, scaledRate, doneAction:2);

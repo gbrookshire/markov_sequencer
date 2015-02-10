@@ -3,7 +3,7 @@ var samp_dir, fnames, playback_rates, buf_arr;
 ~node_functions = (0..7);
 
 // 8 pitches in one whole step, starting at 0.25 of normal playback.
-~playback_rates = 0.05 * (2 ** (((1..8) / 8) * 200 / 1200));
+~playback_rates = 1 * (2 ** (((1..8) / 8) * 200 / 1200));
 
 fnames = ['1', '2'];
 samp_dir = '/Users/gbrookshire/Documents/projects/music/sc/sampler/bell/';
