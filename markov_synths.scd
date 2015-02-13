@@ -59,7 +59,7 @@ param_names.do({|val, ind|
 });
 
 // Here's the function that gets triggered by the sequencer.
-~ping = {|freq|
+~goFunc = {|freq|
 	x = Synth(\singrain,
 		[freq:freq.midicps, amp:rrand(0.1, 0.5), sustain:2]);
 	param_names.do({|val, ind|
