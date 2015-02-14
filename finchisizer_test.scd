@@ -1,44 +1,93 @@
 // For more details on how to alter ongoing synths online:
 // https://www.youtube.com/watch?v=ZVTbRNu2BI0
-
-
 (
 
-SynthDef(\crushed, { |bit_depth=12, bit_rate=22000|
-	var sig, env, freq, out;
+SynthDef(\finch, {arg pressure=0, tension=0, time_const=24000;
+	var sig;
+	sig = SyrinxL.ar(
+		freq:22050,
+		a:pressure,
+		b:tension,
+		g:time_const,
+		h:0.00001);
+	Out.ar(0, sig);
+}).add;
 
-	freq = (50 + (LFNoise0.kr(1.5, mul:3).round * 5)).midicps;
-
-	// env = EnvGen.kr(Env.adsr(0.05, 0.1, 0.5, 3), gate:0);
-	// env = EnvGen.kr(Env.perc(0.01, 10), doneAction:2);
-	sig = SinOsc.ar(freq, mul:0.6);
-
+SynthDef(\bitcrusher, {arg bit_depth=10, bit_rate=10000;
+	var sig;
+	sig = In.ar(0);
 	// Reduce the sampling rate
 	sig = Latch.ar(sig, SinOsc.ar(bit_rate));
-
 	// Reduce the bit depth
 	sig = ((sig * (2 ** bit_depth)).round) / (2 ** bit_depth);
 
-	// out = sig * env;
-
-	out = sig;
-	Out.ar(0, out ! 2);
+	ReplaceOut.ar(0, sig);
 }).add;
 
+
+///// OSC responders
+
+OSCdef.new(
+	\on_resp,
+	{|msg, time, addr, port|
+		msg.postln;
+		if (msg[1] == 1,
+			{x = Synth.tail(s, \finch);},
+			{x.free;});
+	},
+	'/1/toggle1'
+);
+OSCdef.new(
+	\finch_resp,
+	{|msg, time, addr, port|
+		x.set(\pressure, msg[1]);
+		x.set(\tension, msg[2]);
+	},
+	'/1/xy1'
+);
+OSCdef.new(
+	\timeconst_resp,
+	{|msg, time, addr, port|
+		x.set(\time_const, msg[1] * 48000);
+	},
+	'/1/time_const'
+);
+
+// Effects
+OSCdef.new(
+	\bc_on_resp,
+	{|msg, time, addr, port|
+		if (msg[1] == 1,
+			{y = Synth.tail(s, \bitcrusher);},
+			{y.free;});
+	},
+	'/1/bc_on'
+);
+OSCdef.new(
+	\bc_depth_resp,
+	{|msg, time, addr, port|
+		var bd;
+		bd = (msg[1] * 12).round + 3;
+		y.set(\bit_depth, bd);
+	},
+	'/1/bc_depth'
+);
+OSCdef.new(
+	\bc_rate_resp,
+	{|msg, time, addr, port|
+		y.set(\bit_rate, msg[1] * 20000);
+	},
+	'/1/bc_rate'
+);
+
 )
 
-x = Synth.new(\crushed);
-x.set(\bit_depth, 5000);
+// Test out the finchesizer
+x = Synth.tail(s, \finch);
+x.set(\pressure, 0.2);
+x.set(\tension, 0.2);
 x.free;
 
-
-(
-OSCdef.new(
-	\finchisizer_resp,
-	{|msg, time, addr, port|
-		x.set(\bit_depth, ((msg[1]*10).round + 1));
-		x.set(\bit_rate, (msg[2]*22000));
-	},
-	'/2/xy1'
-);
-)
+// Set up effects in a chain like this.
+y = Synth.tail(s, \bitcrusher, [\bit_depth, 1, \bit_rate, 100]);
+y.free;
