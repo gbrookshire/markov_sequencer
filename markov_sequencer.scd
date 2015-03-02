@@ -4,6 +4,8 @@ Push buttons multiple times to give higher probabilities.
 
 In a separate file, define a function ~goFunc that gets called at each
 step through the matrix -- this is what makes the sound.
+Also set a variable ~node_functions that contains arguments that
+will be passed to ~goFunc, determining the different
 
 In TouchOSC (on the tablet):
 Port (outgoing): 57120 (NetAddr.langPort)
@@ -90,7 +92,7 @@ b_states = [[" ", Color.white, Color.black],
 });
 
 // Function to step through the transitions (call with p.value)
-p = {|x|
+~stepFunc = {|x|
 	var tmat_str, out_val, probs, pass;
 
 	// Send a string of the transition matrix to Processing
@@ -128,7 +130,7 @@ t = Task({
 	var delta;
 	delta = 60 / 200; // Time until next iteration
 	loop {
-		p.value;
+		~stepFunc.value;
 		delta.yield;
 	}
 });
@@ -140,7 +142,7 @@ t = Task({
 OSCdef.new(
 	\advance_resp,
 	{|msg, time, addr, port|
-		if (msg[1] == 1, {{p.value}.defer;}, {} );
+		if (msg[1] == 1, {{~stepFunc.value}.defer;}, {} );
 	},
 	'/advance'
 );

@@ -1,17 +1,23 @@
-// For more details on how to alter ongoing synths online:
-// https://www.youtube.com/watch?v=ZVTbRNu2BI0
+// Shift up bifurcation line
+
 (
+
+///// Finchesizer
 
 SynthDef(\finch, {arg pressure=0, tension=0, time_const=24000;
 	var sig;
+	var time_smooth = 0.05; // smooth changes in control vals
 	sig = SyrinxL.ar(
 		freq:22050,
-		a:pressure,
-		b:tension,
-		g:time_const,
-		h:0.00001);
+		a:pressure.lag(time_smooth),
+		b:tension.lag(time_smooth),
+		g:time_const.lag(time_smooth),
+		h:0.00001,
+		mul:2);
 	Out.ar(0, sig);
 }).add;
+
+///// Effects
 
 SynthDef(\bitcrusher, {arg bit_depth=10, bit_rate=10000;
 	var sig;
@@ -24,13 +30,21 @@ SynthDef(\bitcrusher, {arg bit_depth=10, bit_rate=10000;
 	ReplaceOut.ar(0, sig);
 }).add;
 
+SynthDef(\verb, {arg mix=0.33, room=0.5, damp=0.5;
+	var sig;
+	sig = In.ar(0);
+	sig = FreeVerb.ar(sig, mix:mix, room:room, damp:damp);
+	ReplaceOut.ar(0, sig);
+}).add;
+
+
+
 
 ///// OSC responders
 
 OSCdef.new(
 	\on_resp,
 	{|msg, time, addr, port|
-		msg.postln;
 		if (msg[1] == 1,
 			{x = Synth.tail(s, \finch);},
 			{x.free;});
@@ -40,8 +54,12 @@ OSCdef.new(
 OSCdef.new(
 	\finch_resp,
 	{|msg, time, addr, port|
-		x.set(\pressure, msg[1]);
-		x.set(\tension, msg[2]);
+		var pres, tens;
+		pres = msg[2]-0.2;
+		tens = msg[1]-0.2;
+		x.set(\pressure, pres);
+		x.set(\tension, tens);
+
 	},
 	'/1/xy1'
 );
@@ -84,10 +102,17 @@ OSCdef.new(
 
 // Test out the finchesizer
 x = Synth.tail(s, \finch);
-x.set(\pressure, 0.2);
-x.set(\tension, 0.2);
+x.set(\pressure, 0.1);
+x.set(\tension, 0.1);
 x.free;
+
 
 // Set up effects in a chain like this.
 y = Synth.tail(s, \bitcrusher, [\bit_depth, 1, \bit_rate, 100]);
 y.free;
+
+z = Synth.tail(s, \verb);
+z.set(\mix, 0.3);
+z.set(\room, 0.5);
+z.set(\damp, 0.6);
+z.free;
