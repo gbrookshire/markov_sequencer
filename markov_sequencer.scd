@@ -128,7 +128,7 @@ b_states = [[" ", Color.white, Color.black],
 // To automatically step through the matrix, call t.play.
 t = Task({
 	var delta;
-	delta = 60 / 200; // Time until next iteration
+	delta = 60 / 150; // Time until next iteration
 	loop {
 		~stepFunc.value;
 		delta.yield;
