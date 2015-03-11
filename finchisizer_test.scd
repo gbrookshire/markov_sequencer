@@ -9,10 +9,16 @@ Port (incoming): 58100
 
 */
 
-// Instead of trying to get control parameters from running synths,
-// each synth will have an associated dictionary.
-// Make a synth_update function that takes a parameter/name,
-// and updates the dictionary and the synth.
+// Function to update the TouchOSC display -- not working!
+// It seems to be taking the current value instead of the loaded value
+// But this works:
+(
+var adrs_touchOSC, msg, val;
+adrs_touchOSC = NetAddr("192.168.1.139", 58100);
+msg = '/1/volume';
+val = 0; // Specify value here
+adrs_touchOSC.sendMsg(msg, val)
+)
 
 // Also multiple ipads at once
 // Preprogrammed syllables - gestures
@@ -23,11 +29,22 @@ Port (incoming): 58100
 s.boot;
 (
 var adrs_touchOSC;
-var active_synth, finch_param_names, get_finch_params, get_synth_param;
-var update_ipad_disp;
+var active_synth, finch_defaults, finch_param_names,
+n_synths, finch_param_arr;
+var switch_control, update_touchosc_disp, update_synth_param;
 
 adrs_touchOSC = NetAddr("192.168.1.139", 58100);
 active_synth = 0;
+finch_defaults = Dictionary[
+	\pressure -> 0,
+	\tension -> 0,
+	\time_const -> 500,
+	\volume -> 0,
+	\pdepth -> 0,
+	\prate -> 0,
+	\tdepth -> 0,
+	\trate -> 0
+];
 finch_param_names = [
 	\pressure,
 	\tension ,
@@ -38,17 +55,41 @@ finch_param_names = [
 	\tdepth,
 	\trate
 ];
+n_synths = 4;
+finch_param_arr = Array.fill(n_synths, {finch_defaults});
 
-// osc_interface = Dictionary[
-// 	\pressure -> ,
-// 	\tension -> ,
-// 	\time_const -> ,
-// 	\amp -> '/volume,
-// 	\pdepth -> ,
-// 	\prate -> ,
-// 	\tdepth -> ,
-// 	\trate ->
-// ];
+///// Useful functions
+
+// Change TouchOSC control to a new synth
+// I think this isn't choosing the new parameters correctly.
+switch_control = {arg i_synth;
+	var old_synth, active_params;
+	old_synth = active_synth;
+	// Update active_synth
+	active_synth = i_synth;
+	// Update TouchOSC display to reflect new active synth
+	active_params = finch_param_arr.at(i_synth);
+	active_params.postln;
+	update_touchosc_disp.value(active_params);
+};
+
+// Update display on TouchOSC to show params of active synth
+update_touchosc_disp = {arg param_dict;
+	var msg, val;
+	msg = '/1/volume';
+	val = param_dict[\volume];
+	("New" ++ val.asString).postln;
+	adrs_touchOSC.sendMsg(msg, val);
+};
+
+// Update the parameter of a synth in the array and in the synth
+update_synth_param = {arg pname, pval;
+	// Update the array of parameters
+	finch_param_arr[active_synth].put(pname, pval);
+	// Update the synth
+	x[active_synth].set(pname, pval);
+};
+
 
 ///// Finchesizer
 
@@ -106,18 +147,18 @@ get_finch_params = {arg n_synth, param_names=nil;
 	// // out_dict
 };
 */
-
-update_ipad_disp = {arg param_dict;
-	var msg, val;
-	// params = get_finch_params(n_synth, finch_params.keys);
-	// param_dict.keys.do({
-	// 	msg_name =
-	// 	adrs_touchOSC.sendMsg(touchOSC_msg[i], view.value);
-	// });
-	msg = '/1/volume';
-	val = param_dict['volume'];
-	adrs_touchOSC.sendMsg(msg, val);
-};
+//
+// update_ipad_disp = {arg param_dict;
+// 	var msg, val;
+// 	// params = get_finch_params(n_synth, finch_params.keys);
+// 	// param_dict.keys.do({
+// 	// 	msg_name =
+// 	// 	adrs_touchOSC.sendMsg(touchOSC_msg[i], view.value);
+// 	// });
+// 	msg = '/1/volume';
+// 	val = param_dict['volume'];
+// 	adrs_touchOSC.sendMsg(msg, val);
+// };
 
 ///// Effects
 
@@ -144,7 +185,7 @@ SynthDef(\verb, {arg mix=0.33, room=0.5, damp=0.5;
 OSCdef.new(
 	\volume_resp,
 	{|msg, time, addr, port|
-		x[active_synth].set(\volume, msg[1]);
+		update_synth_param.(\volume, msg[1]);
 	},
 	'/1/volume'
 );
@@ -154,33 +195,37 @@ OSCdef.new(
 		var pres, tens;
 		pres = msg[2] - 0.2;
 		tens = msg[1] - 0.2;
-		x[active_synth].set(\pressure, pres);
-		x[active_synth].set(\tension, tens);
+		update_synth_param.(\pressure, pres);
+		update_synth_param.(\tension, tens);
 	},
 	'/1/xy1'
 );
 OSCdef.new(
 	\timeconst_resp,
 	{|msg, time, addr, port|
-		x[active_synth].set(\time_const, 500 + (msg[1] * 48000));
+		update_synth_param.(\time_const, 500 + (msg[1] * 48000));
 	},
 	'/1/time_const'
 );
 OSCdef.new(
 	\pressure_mod_resp,
 	{|msg, time, addr, port|
-		var pres, tens;
-		x[active_synth].set(\pdepth, msg[2] * 0.2);
-		x[active_synth].set(\prate, msg[1] * 50);
+		// var pres, tens;
+		// x[active_synth].set(\pdepth, msg[2] * 0.2);
+		// x[active_synth].set(\prate, msg[1] * 50);
+		update_synth_param.(\pdepth, msg[2] * 0.2);
+		update_synth_param.(\prate, msg[1] * 50);
 	},
 	'/1/pressure_mod'
 );
 OSCdef.new(
 	\tension_mod_resp,
 	{|msg, time, addr, port|
-		var pres, tens;
-		x[active_synth].set(\tdepth, msg[2] * 0.2);
-		x[active_synth].set(\trate, msg[1] * 50);
+		// var pres, tens;
+		// x[active_synth].set(\tdepth, msg[2] * 0.2);
+		// x[active_synth].set(\trate, msg[1] * 50);
+		update_synth_param.(\tdepth, msg[2] * 0.2);
+		update_synth_param.(\trate, msg[1] * 50);
 	},
 	'/1/tension_mod'
 );
@@ -193,12 +238,10 @@ OSCdef.new(
 			if (
 				msg[1] == 1,
 				{
-					var param_dict;
+					var new_active_synth;
 					// Sorry...
-					active_synth = msg[0].asString.at(18).asInt - 49;
-					active_synth.postln;
-					// param_dict = get_finch_params.value(active_synth);
-					// update_ipad_disp.value(param_dict);
+					new_active_synth = msg[0].asString.at(18).asInt - 49;
+					switch_control.(new_active_synth);
 				},
 				{}
 			);
@@ -210,7 +253,7 @@ OSCdef.new(
 OSCdef.new(
 	\dump_resp,
 	{|msg, time, addr, port|
-		get_finch_params.value(active_synth, finch_param_names.keys);
+		finch_param_arr[active_synth].postln;
 	},
 	'/1/dump'
 );
@@ -244,17 +287,21 @@ OSCdef.new(
 );
 
 
-///// Rev up the finchesizer
+///// Rev up the finchesizers
 Task({
 	s.sync; // wait for the server
 	// x = Synth.tail(s, \finch);
 	// Eliminating the group like this makes it hard to apply bitcrushing
-	x = Array.fill(4, {Synth.new(\finch)}); // Make 3 finchesizers
+	x = Array.fill(n_synths, {Synth.new(\finch)});
 }).play
 
 
 
 )
+
+
+
+
 
 
 // Set lots of vals with a dictionary
@@ -295,6 +342,10 @@ set_finch_params.value(2, finch_params);
 get_finch_params.value(2, finch_params.keys);
 
 )
+
+
+
+
 
 
 f.value(x[1]).postln;
