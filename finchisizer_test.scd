@@ -104,9 +104,9 @@ SynthDef(\finch, {arg pressure=0, tension=0, time_const=0, volume=0,
 	time_const = time_const.linexp(0, 1, 1000, 48000);
 	volume = volume * 6;
 	pdepth = pdepth * 0.2;
-	prate = prate * 50;
+	prate = prate.linexp(0, 1, 0.05, 50);
 	tdepth = tdepth * 0.2;
-	trate = trate * 50;
+	trate = trate.linexp(0, 1, 0.05, 50);
 
 	time_smooth = 0.05; // smooth changes in control vals
 
