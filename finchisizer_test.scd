@@ -1,30 +1,36 @@
 /* Finchesizer
 
-To use, first boot up the server.
-Then execute the main block of code.
+To use:
+- Boot up the server.
+- Change adrs_touchOSC to the IP address of the tablet.
+    ("Local IP address" on TouchOSC
+- Then execute the main block of code.
 
-In TouchOSC (on the tablet):
-Port (outgoing): 57120 (or whatever is given for NetAddr.langPort)
+In TouchOSC (on the tablet), fix these settings:
+Host: the IP address of the computer running SuperCollider.
+Port (outgoing): 57120 (default for supercollider)
 Port (incoming): 58100
 
 */
 
 // Values sent back to TouchOSC need to be in the interval [0,1].
 
+// Add phase arguments for modulation?
+// Add pan?
 // Also multiple ipads at once
 // Preprogrammed syllables - gestures
 //  -- Do this with separate SynthDefs
 // Buttons that send to preset combinations of parameters
 // Shift up bifurcation line
 
-s.boot;
 (
 var adrs_touchOSC;
 var active_synth, finch_defaults, n_synths, finch_param_arr;
 var switch_control, update_touchosc_disp, update_synth_param;
 
+n_synths = 4;
 adrs_touchOSC = NetAddr("192.168.1.139", 58100);
-active_synth = 0;
+active_synth = 0; // Which finch is being controlled by TouchOSC
 finch_defaults = Dictionary[
 	\pressure -> 0,
 	\tension -> 0,
@@ -35,7 +41,6 @@ finch_defaults = Dictionary[
 	\tdepth -> 0,
 	\trate -> 0
 ];
-n_synths = 4;
 finch_param_arr = Array.fill(n_synths, {finch_defaults.copy});
 
 
@@ -74,7 +79,6 @@ update_touchosc_disp = {arg param_dict;
 		{or(pname == \prate, pname == \pdepth)} {
 			msg = '/1/pressure_mod';
 			val = [param_dict[\prate], param_dict[\pdepth]];
-			val.postln;
 		}
 		{or(pname == \trate, pname == \tdepth)} {
 			msg = '/1/tension_mod';
@@ -87,7 +91,6 @@ update_touchosc_disp = {arg param_dict;
 };
 
 
-
 ///// Finchesizer
 
 SynthDef(\finch, {arg pressure=0, tension=0, time_const=0, volume=0,
@@ -95,7 +98,7 @@ SynthDef(\finch, {arg pressure=0, tension=0, time_const=0, volume=0,
 	var sig, time_smooth;
 
 	// All control values from TouchOSC vary between 0 and 1.
-	// Adjust to reasonable values here.
+	// Adjust to meaningful values here.
 	pressure = pressure - 0.02;
 	tension = tension - 0.02;
 	time_const = time_const.linexp(0, 1, 1000, 48000);
@@ -112,63 +115,11 @@ SynthDef(\finch, {arg pressure=0, tension=0, time_const=0, volume=0,
 		a: pressure.lag(time_smooth) + SinOsc.kr(prate, mul:pdepth),
 		b: tension.lag(time_smooth) + SinOsc.kr(trate, mul:tdepth),
 		g: time_const.lag(time_smooth),
-		h: 0.00001, // Should this be some other value?
+		h: 0.00001, // ??
 		mul: volume.lag(time_smooth));
 	Out.ar(0, sig);
 }).add;
 
-/*
-// Get the parameters of the synth right now
-~synth_val_poll; // variable for getting synth vals
-get_synth_param = {arg synth, param_name;
-	synth.get(param_name, {arg val; ~synth_val_poll = val});
-	~synth_val_poll
-};
-
-get_finch_params = {arg n_synth, param_names=nil;
-	// var out_dict;
-	// n_synth.postln;
-	// if (
-	// 	param_names.isNil,
-	// 	{param_names = finch_param_names},
-	// 	{}
-	// );
-	// out_dict = Dictionary.new;
-	// "\n".postln;
-	// param_names.do({arg pname;
-	// 	var prm;
-	// 	prm = get_synth_param.value(x[n_synth], pname);
-	// 	prm.postln;
-	// 	out_dict.put(pname, prm);
-	// 	// var prm;
-	// 	// prm = x[n_synth].get(
-	// 	// 	pname,
-	// 	// 	{arg val;
-	// 	// 		("\\" ++ pname ++ " -> " ++ val.asString ++ ",").postln;
-	// 	// 		// out_dict.put(pname, val);
-	// 	// 		// out_dict.add(pname -> val);
-	// 	// 		// out_dict.postln;
-	// 	// 		val.asInt
-	// 	// 		out_dict.put(pname, prm);
-	// 	//
-	// 	// });
-	// });
-	// out_dict.postln;
-	// // out_dict
-};
-*/
-//
-// update_ipad_disp = {arg param_dict;
-// 	var msg, val;
-// 	// params = get_finch_params(n_synth, finch_params.keys);
-// 	// param_dict.keys.do({
-// 	// 	msg_name =
-// 	// 	adrs_touchOSC.sendMsg(touchOSC_msg[i], view.value);
-// 	// });
-// 	msg = '/1/volume';
-// 	val = param_dict['volume'];
-// 	adrs_touchOSC.sendMsg(msg, val);
-// };
 
 ///// Effects
 
@@ -179,7 +130,6 @@ SynthDef(\bitcrusher, {arg bit_depth=10, bit_rate=10000;
 	sig = Latch.ar(sig, SinOsc.ar(bit_rate));
 	// Reduce the bit depth
 	sig = ((sig * (2 ** bit_depth)).round) / (2 ** bit_depth);
-
 	ReplaceOut.ar(0, sig);
 }).add;
 
@@ -231,10 +181,10 @@ OSCdef.new(
 	'/1/tension_mod'
 );
 
-// Responders for selecting which finch to control
-(1..4).do({arg n_finch;
+// Responders for selecting which finchesizer to control
+(1..n_synths).do({arg n_finch;
 	OSCdef.new(
-		'finch_select' ++ n_finch.asString ++  '_resp',
+		'finch_select' ++ n_finch.asString ++ '_resp',
 		{|msg, time, addr, port|
 			if (
 				msg[1] == 1,
@@ -298,7 +248,7 @@ Task({
 
 )
 
-
+/*
 // Test out the finchesizer
 x = Synth.tail(s, \finch);
 x[0].set(\pressure, 0.5);
@@ -315,4 +265,4 @@ z.set(\mix, 0.8);
 z.set(\room, 0.1);
 z.set(\damp, 0.6);
 z.free;
-
+*/
