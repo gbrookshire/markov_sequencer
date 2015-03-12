@@ -9,16 +9,7 @@ Port (incoming): 58100
 
 */
 
-// Function to update the TouchOSC display -- not working!
-// It seems to be taking the current value instead of the loaded value
-// But this works:
-(
-var adrs_touchOSC, msg, val;
-adrs_touchOSC = NetAddr("192.168.1.139", 58100);
-msg = '/1/volume';
-val = 0; // Specify value here
-adrs_touchOSC.sendMsg(msg, val)
-)
+// Values sent back to TouchOSC need to be in the interval [0,1].
 
 // Also multiple ipads at once
 // Preprogrammed syllables - gestures
@@ -29,7 +20,7 @@ adrs_touchOSC.sendMsg(msg, val)
 s.boot;
 (
 var adrs_touchOSC;
-var active_synth, finch_defaults, finch_param_names,
+var active_synth, finch_defaults,
 n_synths, finch_param_arr;
 var switch_control, update_touchosc_disp, update_synth_param;
 
@@ -45,42 +36,12 @@ finch_defaults = Dictionary[
 	\tdepth -> 0,
 	\trate -> 0
 ];
-finch_param_names = [
-	\pressure,
-	\tension ,
-	\time_const,
-	\volume,
-	\pdepth,
-	\prate,
-	\tdepth,
-	\trate
-];
 n_synths = 4;
-finch_param_arr = Array.fill(n_synths, {finch_defaults});
+finch_param_arr = Array.fill(n_synths, {finch_defaults.copy});
+
 
 ///// Useful functions
 
-// Change TouchOSC control to a new synth
-// I think this isn't choosing the new parameters correctly.
-switch_control = {arg i_synth;
-	var old_synth, active_params;
-	old_synth = active_synth;
-	// Update active_synth
-	active_synth = i_synth;
-	// Update TouchOSC display to reflect new active synth
-	active_params = finch_param_arr.at(i_synth);
-	active_params.postln;
-	update_touchosc_disp.value(active_params);
-};
-
-// Update display on TouchOSC to show params of active synth
-update_touchosc_disp = {arg param_dict;
-	var msg, val;
-	msg = '/1/volume';
-	val = param_dict[\volume];
-	("New" ++ val.asString).postln;
-	adrs_touchOSC.sendMsg(msg, val);
-};
 
 // Update the parameter of a synth in the array and in the synth
 update_synth_param = {arg pname, pval;
@@ -90,20 +51,57 @@ update_synth_param = {arg pname, pval;
 	x[active_synth].set(pname, pval);
 };
 
+// Change TouchOSC control to a new synth
+switch_control = {arg new_synth;
+	var old_synth, active_params;
+	old_synth = active_synth;
+	// Update active_synth
+	active_synth = new_synth;
+	// Update TouchOSC display to reflect new active synth
+	active_params = finch_param_arr.at(new_synth);
+	update_touchosc_disp.value(active_params);
+};
+
+// Update display on TouchOSC to show params of active synth
+update_touchosc_disp = {arg param_dict;
+	var parm_list;
+	parm_list = ['volume', 'time_const'];
+	parm_list.do({arg pname;
+		var msg, val;
+		msg = '/1/' ++ pname;
+		val = param_dict[pname];
+		adrs_touchOSC.sendMsg(msg, val);
+	});
+};
+
+
 
 ///// Finchesizer
 
-SynthDef(\finch, {arg pressure=0, tension=0, time_const=24000, volume=0,
+SynthDef(\finch, {arg pressure=0, tension=0, time_const=1, volume=0,
 	pdepth=0, prate=0, tdepth=0, trate=0;
 	var sig, time_smooth;
+
+	// All control values from TouchOSC vary between 0 and 1.
+	// Adjust to reasonable values here.
+	pressure = pressure - 0.02;
+	tension = tension - 0.02;
+	time_const = 500 + (time_const * 48000);
+	volume = volume * 6;
+	pdepth = pdepth * 0.02;
+	prate = prate * 50;
+	tdepth = tdepth * 0.02;
+	trate = trate * 50;
+
 	time_smooth = 0.05; // smooth changes in control vals
+
 	sig = SyrinxL.ar(
 		freq:22050,
 		a: pressure.lag(time_smooth) + SinOsc.kr(prate, mul:pdepth),
 		b: tension.lag(time_smooth) + SinOsc.kr(trate, mul:tdepth),
 		g: time_const.lag(time_smooth),
 		h: 0.00001, // Should this be some other value?
-		mul: 6 * volume.lag(time_smooth));
+		mul: volume.lag(time_smooth));
 	Out.ar(0, sig);
 }).add;
 
@@ -193,39 +191,32 @@ OSCdef.new(
 	\finch_resp,
 	{|msg, time, addr, port|
 		var pres, tens;
-		pres = msg[2] - 0.2;
-		tens = msg[1] - 0.2;
-		update_synth_param.(\pressure, pres);
-		update_synth_param.(\tension, tens);
+		update_synth_param.(\pressure, msg[2]);
+		update_synth_param.(\tension, msg[1]);
+
 	},
 	'/1/xy1'
 );
 OSCdef.new(
 	\timeconst_resp,
 	{|msg, time, addr, port|
-		update_synth_param.(\time_const, 500 + (msg[1] * 48000));
+		update_synth_param.(\time_const, msg[1]);
 	},
 	'/1/time_const'
 );
 OSCdef.new(
 	\pressure_mod_resp,
 	{|msg, time, addr, port|
-		// var pres, tens;
-		// x[active_synth].set(\pdepth, msg[2] * 0.2);
-		// x[active_synth].set(\prate, msg[1] * 50);
-		update_synth_param.(\pdepth, msg[2] * 0.2);
-		update_synth_param.(\prate, msg[1] * 50);
+		update_synth_param.(\pdepth, msg[2]);
+		update_synth_param.(\prate, msg[1]);
 	},
 	'/1/pressure_mod'
 );
 OSCdef.new(
 	\tension_mod_resp,
 	{|msg, time, addr, port|
-		// var pres, tens;
-		// x[active_synth].set(\tdepth, msg[2] * 0.2);
-		// x[active_synth].set(\trate, msg[1] * 50);
-		update_synth_param.(\tdepth, msg[2] * 0.2);
-		update_synth_param.(\trate, msg[1] * 50);
+		update_synth_param.(\tdepth, msg[2]);
+		update_synth_param.(\trate, msg[1]);
 	},
 	'/1/tension_mod'
 );
@@ -238,10 +229,10 @@ OSCdef.new(
 			if (
 				msg[1] == 1,
 				{
-					var new_active_synth;
+					var new_synth;
 					// Sorry...
-					new_active_synth = msg[0].asString.at(18).asInt - 49;
-					switch_control.(new_active_synth);
+					new_synth = msg[0].asString.at(18).asInt - 49;
+					switch_control.(new_synth);
 				},
 				{}
 			);
@@ -293,9 +284,7 @@ Task({
 	// x = Synth.tail(s, \finch);
 	// Eliminating the group like this makes it hard to apply bitcrushing
 	x = Array.fill(n_synths, {Synth.new(\finch)});
-}).play
-
-
+}).play;
 
 )
 
@@ -344,8 +333,8 @@ get_finch_params.value(2, finch_params.keys);
 )
 
 
-
-
+active_synth
+finch_param_arr[4]
 
 
 f.value(x[1]).postln;
