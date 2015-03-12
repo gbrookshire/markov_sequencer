@@ -13,15 +13,14 @@ Port (incoming): 58100
 
 // Also multiple ipads at once
 // Preprogrammed syllables - gestures
-// Buttons that send to preset combinations of parameters
 //  -- Do this with separate SynthDefs
+// Buttons that send to preset combinations of parameters
 // Shift up bifurcation line
 
 s.boot;
 (
 var adrs_touchOSC;
-var active_synth, finch_defaults,
-n_synths, finch_param_arr;
+var active_synth, finch_defaults, n_synths, finch_param_arr;
 var switch_control, update_touchosc_disp, update_synth_param;
 
 adrs_touchOSC = NetAddr("192.168.1.139", 58100);
@@ -29,7 +28,7 @@ active_synth = 0;
 finch_defaults = Dictionary[
 	\pressure -> 0,
 	\tension -> 0,
-	\time_const -> 500,
+	\time_const -> 0,
 	\volume -> 0,
 	\pdepth -> 0,
 	\prate -> 0,
@@ -41,7 +40,6 @@ finch_param_arr = Array.fill(n_synths, {finch_defaults.copy});
 
 
 ///// Useful functions
-
 
 // Update the parameter of a synth in the array and in the synth
 update_synth_param = {arg pname, pval;
@@ -64,13 +62,27 @@ switch_control = {arg new_synth;
 
 // Update display on TouchOSC to show params of active synth
 update_touchosc_disp = {arg param_dict;
-	var parm_list;
-	parm_list = ['volume', 'time_const'];
-	parm_list.do({arg pname;
+	param_dict.keys.do({arg pname;
 		var msg, val;
-		msg = '/1/' ++ pname;
-		val = param_dict[pname];
-		adrs_touchOSC.sendMsg(msg, val);
+		case
+		{pname == \volume} {msg = '/1/volume'}
+		{pname == \time_const} {msg = '/1/time_const'}
+		{or(pname == \pressure, pname == \tension)} {
+			msg = '/1/xy';
+			val = [param_dict[\pressure], param_dict[\pressure]];
+		}
+		{or(pname == \prate, pname == \pdepth)} {
+			msg = '/1/pressure_mod';
+			val = [param_dict[\prate], param_dict[\pdepth]];
+			val.postln;
+		}
+		{or(pname == \trate, pname == \tdepth)} {
+			msg = '/1/tension_mod';
+			val = [param_dict[\trate], param_dict[\tdepth]];
+		}
+		{true} {("Param " + pname + " not known.").postln;};
+		if(val.isNil, {val = param_dict[pname]}, {});
+		adrs_touchOSC.sendMsg(msg, *val);
 	});
 };
 
@@ -78,7 +90,7 @@ update_touchosc_disp = {arg param_dict;
 
 ///// Finchesizer
 
-SynthDef(\finch, {arg pressure=0, tension=0, time_const=1, volume=0,
+SynthDef(\finch, {arg pressure=0, tension=0, time_const=0, volume=0,
 	pdepth=0, prate=0, tdepth=0, trate=0;
 	var sig, time_smooth;
 
@@ -86,11 +98,11 @@ SynthDef(\finch, {arg pressure=0, tension=0, time_const=1, volume=0,
 	// Adjust to reasonable values here.
 	pressure = pressure - 0.02;
 	tension = tension - 0.02;
-	time_const = 500 + (time_const * 48000);
+	time_const = time_const.linexp(0, 1, 1000, 48000);
 	volume = volume * 6;
-	pdepth = pdepth * 0.02;
+	pdepth = pdepth * 0.2;
 	prate = prate * 50;
-	tdepth = tdepth * 0.02;
+	tdepth = tdepth * 0.2;
 	trate = trate * 50;
 
 	time_smooth = 0.05; // smooth changes in control vals
@@ -190,12 +202,10 @@ OSCdef.new(
 OSCdef.new(
 	\finch_resp,
 	{|msg, time, addr, port|
-		var pres, tens;
-		update_synth_param.(\pressure, msg[2]);
 		update_synth_param.(\tension, msg[1]);
-
+		update_synth_param.(\pressure, msg[2]);
 	},
-	'/1/xy1'
+	'/1/xy'
 );
 OSCdef.new(
 	\timeconst_resp,
@@ -207,16 +217,16 @@ OSCdef.new(
 OSCdef.new(
 	\pressure_mod_resp,
 	{|msg, time, addr, port|
-		update_synth_param.(\pdepth, msg[2]);
 		update_synth_param.(\prate, msg[1]);
+		update_synth_param.(\pdepth, msg[2]);
 	},
 	'/1/pressure_mod'
 );
 OSCdef.new(
 	\tension_mod_resp,
 	{|msg, time, addr, port|
-		update_synth_param.(\tdepth, msg[2]);
 		update_synth_param.(\trate, msg[1]);
+		update_synth_param.(\tdepth, msg[2]);
 	},
 	'/1/tension_mod'
 );
@@ -244,7 +254,7 @@ OSCdef.new(
 OSCdef.new(
 	\dump_resp,
 	{|msg, time, addr, port|
-		finch_param_arr[active_synth].postln;
+		finch_param_arr[active_synth].postln
 	},
 	'/1/dump'
 );
@@ -288,56 +298,6 @@ Task({
 
 )
 
-
-
-
-
-
-// Set lots of vals with a dictionary
-(
-var finch_params;
-var set_finch_params, get_finch_params;
-
-finch_params = Dictionary[
-	\pressure -> 0.5,
-	\tension -> 0.2,
-	\time_const -> 24000,
-	\amp -> 0.8,
-	\pdepth -> 0.05,
-	\prate -> 15,
-	\tdepth -> 0.05,
-	\trate -> 5
-];
-
-// A function to set the parameters of a synth in the synth array `x'.
-set_finch_params = {arg n_synth, param_dict;
-	param_dict.keys.do({arg pname;
-		x[n_synth].set(pname, param_dict[pname]);
-	});
-};
-
-// A function to get parameter values and do something with them.
-get_finch_params = {arg n_synth, param_names;
-	param_names.do({arg pname;
-		x[n_synth].get(
-			pname,
-			// Do something! Adjust this function to change what's done.
-			{arg val; ("\\" ++ pname ++ " -> " ++ val.asString ++ ",").postln}
-		);
-	});
-};
-
-set_finch_params.value(2, finch_params);
-get_finch_params.value(2, finch_params.keys);
-
-)
-
-
-active_synth
-finch_param_arr[4]
-
-
-f.value(x[1]).postln;
 
 // Test out the finchesizer
 x = Synth.tail(s, \finch);
