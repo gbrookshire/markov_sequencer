@@ -3,17 +3,24 @@
 To use:
 - Boot up the server.
 - Change adrs_touchOSC to the IP address of the tablet.
-    ("Local IP address" on TouchOSC
+("Local IP address" on TouchOSC)
 - Then execute the main block of code.
 
 In TouchOSC (on the tablet), fix these settings:
 Host: the IP address of the computer running SuperCollider.
+    - On a Mac, you can get that with "ifconfig en1" in Terminal,
+      and taking the "inet" IP address, not "broadcast".
 Port (outgoing): 57120 (default for supercollider)
 Port (incoming): 58100
 
 */
 
 // Values sent back to TouchOSC need to be in the interval [0,1].
+
+// Volume knob.
+// Implement functions for the preset buttons.
+// Save to and from RAM, and then to and from disk w/ YAML.
+
 
 // Add phase arguments for modulation?
 // Add pan?
@@ -25,10 +32,15 @@ Port (incoming): 58100
 
 (
 var adrs_touchOSC;
-var active_synth, finch_defaults, n_synths, finch_param_arr;
+var active_synth, finch_defaults, finch_param_arr, n_synths, n_presets;
 var switch_control, update_touchosc_disp, update_synth_param;
+var writingYAML, toYAML, fromYAML;
+var preset_arr;
+var save_synth_settings, load_synth_settings;
+var save_all_settings, load_all_settings;
 
 n_synths = 4;
+n_presets = 5;
 adrs_touchOSC = NetAddr("192.168.1.139", 58100);
 active_synth = 0; // Which finch is being controlled by TouchOSC
 finch_defaults = Dictionary[
@@ -42,6 +54,7 @@ finch_defaults = Dictionary[
 	\trate -> 0
 ];
 finch_param_arr = Array.fill(n_synths, {finch_defaults.copy});
+preset_arr = Array.fill(n_presets, {finch_param_arr.copy});
 
 
 ///// Useful functions
@@ -87,6 +100,49 @@ update_touchosc_disp = {arg param_dict;
 		{true} {("Param " + pname + " not known.").postln;};
 		if(val.isNil, {val = param_dict[pname]}, {});
 		adrs_touchOSC.sendMsg(msg, *val);
+	});
+};
+
+// Read and write as YAML files.
+toYAML = {arg dict, fname;
+	var file_pointer;
+	file_pointer = File(fname, "w");
+	dict.keys.do({arg param_name;
+		var line;
+		line = param_name ++ ": " ++ dict[param_name].asString ++ "\n";
+		file_pointer.write(line);
+	});
+	file_pointer.close();
+};
+
+fromYAML = {arg fname;
+	var raw_dict, cooked_dict;
+	raw_dict = fname.parseYAMLFile;
+	cooked_dict = Dictionary[];
+	raw_dict.keys.do({arg param_name;
+		cooked_dict[param_name.asSymbol] = raw_dict[param_name].asFloat;
+	});
+	cooked_dict
+};
+
+// Save to RAM
+save_synth_settings = {arg voice, preset_loc;
+	preset_arr[preset_loc][voice] = finch_param_arr[voice];
+};
+// Load from RAM
+load_synth_settings = {arg voice, preset_loc;
+	finch_param_arr[voice] = preset_arr[preset_loc][voice];
+};
+// Save all current to RAM
+save_all_settings = {arg preset_loc;
+	finch_param_arr.do({arg param_dict, i;
+		save_synth_settings(i, preset_loc);
+	});
+};
+// Load all current to RAM
+load_all_settings = {arg preset_loc;
+	finch_param_arr.do({arg param_dict, i;
+		load_synth_settings(i, preset_loc);
 	});
 };
 
@@ -237,6 +293,38 @@ OSCdef.new(
 	'/1/bc_rate'
 );
 
+OSCdef.new(
+	\verb_on_resp,
+	{|msg, time, addr, port|
+		if (msg[1] == 1,
+			{z = Synth.tail(s, \verb);},
+			{z.free;});
+	},
+	'/1/verb_on'
+);
+OSCdef.new(
+	\verb_mix_resp,
+	{|msg, time, addr, port|
+		z.set(\mix, msg[1]);
+	},
+	'/1/verb_mix'
+);
+OSCdef.new(
+	\verb_room_resp,
+	{|msg, time, addr, port|
+		z.set(\room, msg[1]);
+	},
+	'/1/verb_room'
+);
+OSCdef.new(
+	\verb_damp_resp,
+	{|msg, time, addr, port|
+		z.set(\damp, msg[1]);
+	},
+	'/1/verb_room'
+);
+
+
 
 ///// Rev up the finchesizers
 Task({
@@ -266,3 +354,34 @@ z.set(\room, 0.1);
 z.set(\damp, 0.6);
 z.free;
 */
+
+(
+var home = "~/".standardizePath;
+var fname = home ++ "Desktop/preset.txt";
+var toYAML, fromYAML, finch_defaults;
+finch_defaults = Dictionary[
+	\pressure -> 111,
+	\tension -> 1111,
+	\time_const -> 0,
+	\volume -> 0,
+	\pdepth -> 0,
+	\prate -> 0,
+	\tdepth -> 0,
+	\trate -> 0
+];
+
+
+
+toYAML.value(finch_defaults, fname);
+
+d = fromYAML.value(fname);
+)
+
+(
+var fname = "~/".standardizePath ++ "Desktop/preset.txt";
+d = fname.parseYAMLFile;
+d.postln;
+)
+d.at(\pressure) + 222
+
+
