@@ -91,7 +91,7 @@ b_states = [[" ", Color.white, Color.black],
 
 });
 
-// Function to step through the transitions (call with p.value)
+// Function to step through the transitions
 ~stepFunc = {|x|
 	var tmat_str, out_val, probs, pass;
 

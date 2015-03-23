@@ -8,8 +8,8 @@ To use:
 
 In TouchOSC (on the tablet), fix these settings:
 Host: the IP address of the computer running SuperCollider.
-    - On a Mac, you can get that with "ifconfig en1" in Terminal,
-      and taking the "inet" IP address, not "broadcast".
+- On a Mac, you can get that with "ifconfig en1" in Terminal,
+and taking the "inet" IP address, not "broadcast".
 Port (outgoing): 57120 (default for supercollider)
 Port (incoming): 58100
 
@@ -17,12 +17,10 @@ Port (incoming): 58100
 
 // Values sent back to TouchOSC need to be in the interval [0,1].
 
-// Volume knob.
 // Implement functions for the preset buttons.
 // Save to and from RAM, and then to and from disk w/ YAML.
 
 
-// Add phase arguments for modulation?
 // Add pan?
 // Also multiple ipads at once
 // Preprogrammed syllables - gestures
@@ -35,12 +33,12 @@ var adrs_touchOSC;
 var active_synth, finch_defaults, finch_param_arr, n_synths, n_presets;
 var switch_control, update_touchosc_disp, update_synth_param;
 var writingYAML, toYAML, fromYAML;
-var preset_arr;
+var preset_arr, writing_armed;
 var save_synth_settings, load_synth_settings;
 var save_all_settings, load_all_settings;
 
 n_synths = 4;
-n_presets = 5;
+n_presets = 6;
 adrs_touchOSC = NetAddr("192.168.1.139", 58100);
 active_synth = 0; // Which finch is being controlled by TouchOSC
 finch_defaults = Dictionary[
@@ -55,6 +53,8 @@ finch_defaults = Dictionary[
 ];
 finch_param_arr = Array.fill(n_synths, {finch_defaults.copy});
 preset_arr = Array.fill(n_presets, {finch_param_arr.copy});
+writing_armed = false;
+preset_arr.postln;
 
 
 ///// Useful functions
@@ -171,7 +171,7 @@ SynthDef(\finch, {arg pressure=0, tension=0, time_const=0, volume=0,
 		a: pressure.lag(time_smooth) + SinOsc.kr(prate, mul:pdepth),
 		b: tension.lag(time_smooth) + SinOsc.kr(trate, mul:tdepth),
 		g: time_const.lag(time_smooth),
-		h: 0.00001, // ??
+		h: 0.00001,
 		mul: volume.lag(time_smooth));
 	Out.ar(0, sig);
 }).add;
@@ -265,6 +265,47 @@ OSCdef.new(
 	'/1/dump'
 );
 
+// Presets
+OSCdef.new(
+	\write_resp,
+	{|msg, time, addr, port|
+		writing_armed = msg[1].asBoolean;
+		("Write armed:" + writing_armed.asString).postln;
+	},
+	'/2/write_arm'
+);
+(1..n_presets).do({arg n_preset; // store individual synth settings
+	(1..n_synths).do({arg n_synth;
+		var pre_str, syn_str;
+		pre_str = n_preset.asString;
+		syn_str = n_synth.asString;
+		OSCdef.new(
+			'p_select' ++ pre_str ++ '_' ++ syn_str,
+			{|msg, time, addr, port|
+				if(msg[1] == 1,
+					{if(writing_armed,
+						{save_synth_settings.(n_synth, n_preset)},
+						{load_synth_settings.(n_synth, n_preset)}
+					)},
+					{}
+				);
+			},
+			'/2/preset_bank/' ++ pre_str ++ '/' ++ syn_str;
+		);
+	});
+});
+(1..n_presets).do({arg n_preset; // store all current settings
+	OSCdef.new(
+		'pm_select' ++ n_preset.asString,
+		{|msg, time, addr, port|
+			if(writing_armed,
+				{save_all_settings.value(n_preset)},
+				{load_all_settings.value(n_preset)}
+			)
+		},
+		'/2/preset_mult_bank/' ++ n_preset.asString;
+	);
+});
 
 // Effects
 OSCdef.new(
@@ -370,8 +411,6 @@ finch_defaults = Dictionary[
 	\trate -> 0
 ];
 
-
-
 toYAML.value(finch_defaults, fname);
 
 d = fromYAML.value(fname);
@@ -382,6 +421,14 @@ var fname = "~/".standardizePath ++ "Desktop/preset.txt";
 d = fname.parseYAMLFile;
 d.postln;
 )
-d.at(\pressure) + 222
 
+(
+a = Dictionary[
+	\x -> 1,
+	\y -> 2];
+b = Array.fill(2, {a.copy});
+c = Array.fill(2, {b.copy});
+
+c[1][1][\x]
+)
 
