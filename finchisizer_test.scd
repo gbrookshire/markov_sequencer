@@ -17,9 +17,6 @@ Port (incoming): 58100
 
 // Values sent back to TouchOSC need to be in the interval [0,1].
 
-// Implement functions for the preset buttons.
-// Save to and from RAM, and then to and from disk w/ YAML.
-
 
 // Add pan?
 // Also multiple ipads at once
@@ -30,11 +27,12 @@ Port (incoming): 58100
 
 (
 var adrs_touchOSC;
-var active_synth, finch_defaults, finch_param_arr, n_synths, n_presets;
+var active_synth, finch_defaults, n_synths, n_presets;
 var switch_control, update_touchosc_disp, update_synth_param;
-var writingYAML, toYAML, fromYAML;
-var preset_arr, writing_armed;
-var save_synth_settings, load_synth_settings;
+var writingYAML, dictToYAML, listToYAML, fromYAML;
+var finch_param_arr; // Array of dicts -- a group of synths
+var preset_arr; // Array of Arrays of Dicts - for storing preset synth groups
+var writing_armed, save_synth_settings, load_synth_settings;
 var save_all_settings, load_all_settings;
 
 n_synths = 4;
@@ -54,7 +52,6 @@ finch_defaults = Dictionary[
 finch_param_arr = Array.fill(n_synths, {finch_defaults.copy});
 preset_arr = Array.fill(n_presets, {finch_param_arr.copy});
 writing_armed = false;
-preset_arr.postln;
 
 
 ///// Useful functions
@@ -104,25 +101,35 @@ update_touchosc_disp = {arg param_dict;
 };
 
 // Read and write as YAML files.
-toYAML = {arg dict, fname;
+dictToYAML = {arg file_pointer, dict;
+	dict.keys.do({arg param;
+		var line;
+		line = "  " ++ param ++ ": " ++ dict[param].asString ++ "\n";
+		file_pointer.write(line);
+	});
+};
+listToYAML = {arg fname;
 	var file_pointer;
 	file_pointer = File(fname, "w");
-	dict.keys.do({arg param_name;
-		var line;
-		line = param_name ++ ": " ++ dict[param_name].asString ++ "\n";
-		file_pointer.write(line);
+	finch_param_arr.do({arg param_dict, i;
+		file_pointer.write("- \n");
+		dictToYAML.value(file_pointer, param_dict);
 	});
 	file_pointer.close();
 };
-
 fromYAML = {arg fname;
-	var raw_dict, cooked_dict;
-	raw_dict = fname.parseYAMLFile;
-	cooked_dict = Dictionary[];
-	raw_dict.keys.do({arg param_name;
-		cooked_dict[param_name.asSymbol] = raw_dict[param_name].asFloat;
+	var raw, cooked;
+	raw = fname.parseYAMLFile;
+	("Loading" + raw.size.asString + "presets...").postln;
+	cooked = Array.fill(raw.size, {|i|
+		var cooked_dict, raw_dict;
+		raw_dict = raw[i];
+		cooked_dict = Dictionary[];
+		raw_dict.keys.do({arg param_name;
+			cooked_dict[param_name.asSymbol] = raw_dict[param_name].asFloat;
+		});
+		cooked_dict
 	});
-	cooked_dict
 };
 
 // Save to RAM
@@ -131,19 +138,20 @@ save_synth_settings = {arg voice, preset_loc;
 };
 // Load from RAM
 load_synth_settings = {arg voice, preset_loc;
-	finch_param_arr[voice] = preset_arr[preset_loc][voice];
+	finch_param_arr[voice] = preset_arr[preset_loc, voice];
 };
 // Save all current to RAM
 save_all_settings = {arg preset_loc;
 	finch_param_arr.do({arg param_dict, i;
-		save_synth_settings(i, preset_loc);
+		save_synth_settings.value(i, preset_loc);
 	});
 };
 // Load all current to RAM
 load_all_settings = {arg preset_loc;
+	"Loading settings...".postln;
 	finch_param_arr.do({arg param_dict, i;
-		load_synth_settings(i, preset_loc);
-	});
+		load_synth_settings.value(i, preset_loc);
+		});
 };
 
 
@@ -282,6 +290,7 @@ OSCdef.new(
 		OSCdef.new(
 			'p_select' ++ pre_str ++ '_' ++ syn_str,
 			{|msg, time, addr, port|
+				msg.postln;
 				if(msg[1] == 1,
 					{if(writing_armed,
 						{save_synth_settings.(n_synth, n_preset)},
@@ -306,6 +315,40 @@ OSCdef.new(
 		'/2/preset_mult_bank/' ++ n_preset.asString;
 	);
 });
+OSCdef.new(
+	\save_presets_resp,
+	{|msg, time, addr, port|
+		if (msg[1] == 1,
+			// {
+			// 	File.saveDialog(
+			// 		"Save current settings",
+			// 		"preset-0.yaml",
+			// 		{|fn| listToYAML.value(fn)},
+			// 		{}
+			// 	)
+			// },
+			{"SAVE_FILL_IN".postln},
+			{}
+		);
+	},
+	'/2/save_presets'
+);
+OSCdef.new(
+	\load_presets_resp,
+	{|msg, time, addr, port|
+		if (msg[1] == 1,
+			// {
+			// 	File.openDialog(
+			// 		"Load settings",
+			// 		{|fn| preset_arr = fromYAML.(fn)},
+			// 		{}
+			// )},
+			{"LOAD_FILL_IN".postln},
+			{}
+		)
+	},
+	'/2/load_presets'
+);
 
 // Effects
 OSCdef.new(
@@ -366,7 +409,6 @@ OSCdef.new(
 );
 
 
-
 ///// Rev up the finchesizers
 Task({
 	s.sync; // wait for the server
@@ -412,15 +454,23 @@ finch_defaults = Dictionary[
 ];
 
 toYAML.value(finch_defaults, fname);
-
 d = fromYAML.value(fname);
 )
 
 (
-var fname = "~/".standardizePath ++ "Desktop/preset.txt";
-d = fname.parseYAMLFile;
-d.postln;
+var fname, fromYAML;
+
+fname = "~/".standardizePath ++ "Desktop/preset.txt";
+// d = fname.parseYAMLFile;
+// d[0]["pdepth"].postln;
+
+
+
+d = fromYAML.(fname);
+d[0][\pdepth]
+
 )
+
 
 (
 a = Dictionary[
@@ -432,3 +482,29 @@ c = Array.fill(2, {b.copy});
 c[1][1][\x]
 )
 
+(
+n = NetAddr("127.0.0.1", 57120);
+// n.sendMsg('/2/preset_bank/1/1', 1);
+n.sendMsg('/2/load_presets', 1);
+)
+
+(
+var fromYAML;
+fromYAML = {arg fname;
+	var raw, cooked;
+	raw = fname.parseYAMLFile;
+	("Loading" + raw.size.asString + "presets...").postln;
+	cooked = Array.fill(raw.size, {|i|
+		var cooked_dict, raw_dict;
+		raw_dict = raw[i];
+		cooked_dict = Dictionary[];
+		raw_dict.keys.do({arg param_name;
+			cooked_dict[param_name.asSymbol] = raw_dict[param_name].asFloat;
+		});
+		cooked_dict
+	});
+};
+File.openDialog("Load presets", {|fn| d = fromYAML.(fn)}, {});
+)
+d
+d = 0;
