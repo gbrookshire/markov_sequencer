@@ -1,0 +1,36 @@
+- 
+  prate: 0.3
+  volume: 0.3
+  time_const: 0.3
+  tdepth: 0.3
+  tension: 0.3
+  trate: 0.3
+  pressure: 0.3
+  pdepth: 0.3
+- 
+  prate: 0.73
+  volume: 0.73
+  time_const: 0.73
+  tdepth: 0.73
+  tension: 0.73
+  trate: 0.73
+  pressure: 0.73
+  pdepth: 0.73
+- 
+  prate: 0.87
+  volume: 0.87
+  time_const: 0.87
+  tdepth: 0.87
+  tension: 0.87
+  trate: 0.87
+  pressure: 0.87
+  pdepth: 0.87
+- 
+  prate: 1
+  volume: 1
+  time_const: 1
+  tdepth: 1
+  tension: 1
+  trate: 1
+  pressure: 1
+  pdepth: 1

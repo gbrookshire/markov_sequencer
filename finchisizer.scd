@@ -15,6 +15,37 @@ Port (incoming): 58100
 
 */
 
+
+// Change the interface for saving and loading.
+// Have presets saved individually, or as groups of synths to use at the same time.
+// Not as a bank of groups, which is what happens now.
+// Save and load these groups in separate files.
+// When writing/loading a preset, open a file dialog box.
+// *** Can't open a dialog box from OSC, probably because the processes are
+//     running on different threads. So loading and saving to disk will need
+//     to be done with a GUI on the host computer.
+
+/*
+Presets are loaded into the bank of presets in RAM.
+This is an array of arrays of dicts.
+Biggest array holds the presets available in RAM.
+Subarrays hold a group of synths.
+Each dict holds the settins for a single synth.
+
+Pressing 'save' on the TouchOSC GUI brings up a dialog box to save the current
+group to a YAML file.
+Pressing 'load' on TouchOSC GUI brings up a dialog box to load a group from a YAML file.
+*/
+
+
+/*
+Loading a group works! But now switching between groups doesn't work?
+Maybe the solution is to make a class...
+
+*/
+
+
+
 // Values sent back to TouchOSC need to be in the interval [0,1].
 
 
@@ -27,18 +58,28 @@ Port (incoming): 58100
 
 (
 var adrs_touchOSC;
-var active_synth, finch_defaults, n_synths, n_presets;
-var switch_control, update_touchosc_disp, update_synth_param;
-var writingYAML, dictToYAML, listToYAML, fromYAML;
+var active_synth, active_group, finch_defaults, n_synths, nPresets;
+var switch_synth_control, switch_group_control;
+var update_touchosc_disp, update_synth_param, update_synths_in_group;
+var saveYAMLDict, saveYAML, loadYAML;
+var load_preset_file, load_presets_dialog, savePresetFile, activate_preset_group;
 var finch_param_arr; // Array of dicts -- a group of synths
-var preset_arr; // Array of Arrays of Dicts - for storing preset synth groups
-var writing_armed, save_synth_settings, load_synth_settings;
-var save_all_settings, load_all_settings;
+var preset_arr; // Array of Arrays of Dicts - for holding preset synth groups in RAM
+var save_synth_settings, load_synth_settings;
+var save_all_settings, load_group_settings;
+var win, btns;
+var presets, preset_dir;
+
+// Which presets to load on starting up the script
+preset_dir = "/Users/gbrookshire/Documents/projects/music/sc/markov_sequencer/presets/";
+presets = ["blank.yaml", "1.yaml", "2.yaml", "3.yaml"];
 
 n_synths = 4;
-n_presets = 6;
-adrs_touchOSC = NetAddr("192.168.1.139", 58100);
+nPresets = 6;
 active_synth = 0; // Which finch is being controlled by TouchOSC
+active_group = 0; // Which preset group is active now
+adrs_touchOSC = NetAddr("192.168.1.139", 58100);
+
 finch_defaults = Dictionary[
 	\pressure -> 0,
 	\tension -> 0,
@@ -50,8 +91,7 @@ finch_defaults = Dictionary[
 	\trate -> 0
 ];
 finch_param_arr = Array.fill(n_synths, {finch_defaults.copy});
-preset_arr = Array.fill(n_presets, {finch_param_arr.copy});
-writing_armed = false;
+preset_arr = Array.fill(nPresets, {finch_param_arr.copy});
 
 
 ///// Useful functions
@@ -61,11 +101,21 @@ update_synth_param = {arg pname, pval;
 	// Update the array of parameters
 	finch_param_arr[active_synth].put(pname, pval);
 	// Update the synth
-	x[active_synth].set(pname, pval);
+	x[active_synth].set(pname.asSymbol, pval);
+};
+update_synths_in_group = {
+	var prev_active = active_synth;
+	(0..3).do({arg n_synth; // Loop through synths in the group
+		active_synth = n_synth;
+		finch_param_arr[active_synth].keys.do({arg pname;
+			update_synth_param.value(pname, finch_param_arr[n_synth][pname]);
+		})
+	});
+	active_synth = prev_active;
 };
 
 // Change TouchOSC control to a new synth
-switch_control = {arg new_synth;
+switch_synth_control = {arg new_synth;
 	var old_synth, active_params;
 	old_synth = active_synth;
 	// Update active_synth
@@ -73,6 +123,22 @@ switch_control = {arg new_synth;
 	// Update TouchOSC display to reflect new active synth
 	active_params = finch_param_arr.at(new_synth);
 	update_touchosc_disp.value(active_params);
+};
+
+// Change to a different preset group
+switch_group_control = {arg new_group;
+	("Activating synth group" + new_group.asString).postln;
+	finch_param_arr = preset_arr[new_group];
+	active_group = new_group;
+	update_synths_in_group.value;
+	// Activate LED to show which preset is being used.
+	// Turn off other LEDs.
+	// address: /2/led1 through /2/led6
+	(1..6).do({|i|
+		adrs_touchOSC.sendMsg('/2/led' ++ i.asSymbol, 0);
+	});
+	adrs_touchOSC.sendMsg('/2/led' ++ (new_group + 1).asSymbol, 1);
+
 };
 
 // Update display on TouchOSC to show params of active synth
@@ -101,24 +167,28 @@ update_touchosc_disp = {arg param_dict;
 };
 
 // Read and write as YAML files.
-dictToYAML = {arg file_pointer, dict;
+saveYAMLDict = {arg file_pointer, dict;
 	dict.keys.do({arg param;
 		var line;
 		line = "  " ++ param ++ ": " ++ dict[param].asString ++ "\n";
 		file_pointer.write(line);
 	});
 };
-listToYAML = {arg fname;
+saveYAML = {arg fname;
 	var file_pointer;
 	file_pointer = File(fname, "w");
 	finch_param_arr.do({arg param_dict, i;
 		file_pointer.write("- \n");
-		dictToYAML.value(file_pointer, param_dict);
+		saveYAMLDict.value(file_pointer, param_dict);
 	});
 	file_pointer.close();
 };
-fromYAML = {arg fname;
+loadYAML = {arg fname;
 	var raw, cooked;
+	if (not(fname.endsWith(".yaml")),
+		{"Chosen file is not a .yaml file.".warn},
+		{}
+	);
 	raw = fname.parseYAMLFile;
 	("Loading" + raw.size.asString + "presets...").postln;
 	cooked = Array.fill(raw.size, {|i|
@@ -132,10 +202,46 @@ fromYAML = {arg fname;
 	});
 };
 
-// Save to RAM
-save_synth_settings = {arg voice, preset_loc;
-	preset_arr[preset_loc][voice] = finch_param_arr[voice];
+load_preset_file = {arg fn;
+	var file_cont, msg;
+	// Function that does something to a filename string.
+	fn.postln;
+	file_cont = loadYAML.(fn);
+	preset_arr[active_group] = file_cont;
+	finch_param_arr = file_cont;
+	// Set label to show filename
+	// address: /2/label1 through /2/label6
+	msg = '/2/label' ++ (active_group+1).asSymbol;
+	adrs_touchOSC.sendMsg(msg, fn.asString.split($/).last);
+	// Update all the synths in the group
+	update_synths_in_group.value;
 };
+
+load_presets_dialog = {
+	File.openDialog(
+		"Load settings",
+		{|fn| load_preset_file.value(fn)},
+		{}
+	);
+	finch_param_arr.postln;
+};
+
+// activate_preset_group = {arg n_group;
+// 	("Activate preset" + n_group.asString).postln;
+// 	load_group_settings.value(n_group);
+// 	// Activate LED to show which preset is being used.
+// 	// Turn off other LEDs.
+// 	// address: /2/led1 through /2/led6
+// 	(1..6).do({|i|
+// 		adrs_touchOSC.sendMsg('/2/led' ++ i.asSymbol, 0);
+// 	});
+// 	adrs_touchOSC.sendMsg('/2/led' ++ n_group.asSymbol, 1);
+// };
+
+// // Save to RAM
+// save_synth_settings = {arg voice, preset_loc;
+// 	preset_arr[preset_loc][voice] = finch_param_arr[voice];
+// };
 // Load from RAM
 load_synth_settings = {arg voice, preset_loc;
 	finch_param_arr[voice] = preset_arr[preset_loc, voice];
@@ -146,13 +252,14 @@ save_all_settings = {arg preset_loc;
 		save_synth_settings.value(i, preset_loc);
 	});
 };
-// Load all current to RAM
-load_all_settings = {arg preset_loc;
-	"Loading settings...".postln;
-	finch_param_arr.do({arg param_dict, i;
-		load_synth_settings.value(i, preset_loc);
-		});
-};
+// // Load all current to RAM
+// load_group_settings = {arg preset_loc;
+// 	active_group = preset_loc;
+// 	update_synths_in_group.value;
+// 	// finch_param_arr.do({arg param_dict, i;
+// 	// 	load_synth_settings.value(i, preset_loc);
+// 	// });
+// };
 
 
 ///// Finchesizer
@@ -256,7 +363,7 @@ OSCdef.new(
 					var new_synth;
 					// Sorry...
 					new_synth = msg[0].asString.at(18).asInt - 49;
-					switch_control.(new_synth);
+					switch_synth_control.(new_synth);
 				},
 				{}
 			);
@@ -274,81 +381,16 @@ OSCdef.new(
 );
 
 // Presets
-OSCdef.new(
-	\write_resp,
-	{|msg, time, addr, port|
-		writing_armed = msg[1].asBoolean;
-		("Write armed:" + writing_armed.asString).postln;
-	},
-	'/2/write_arm'
-);
-(1..n_presets).do({arg n_preset; // store individual synth settings
-	(1..n_synths).do({arg n_synth;
-		var pre_str, syn_str;
-		pre_str = n_preset.asString;
-		syn_str = n_synth.asString;
-		OSCdef.new(
-			'p_select' ++ pre_str ++ '_' ++ syn_str,
-			{|msg, time, addr, port|
-				msg.postln;
-				if(msg[1] == 1,
-					{if(writing_armed,
-						{save_synth_settings.(n_synth, n_preset)},
-						{load_synth_settings.(n_synth, n_preset)}
-					)},
-					{}
-				);
-			},
-			'/2/preset_bank/' ++ pre_str ++ '/' ++ syn_str;
-		);
-	});
-});
-(1..n_presets).do({arg n_preset; // store all current settings
+(1..nPresets).do({arg nPreset; // store all current settings
 	OSCdef.new(
-		'pm_select' ++ n_preset.asString,
+		'pm_select_' ++ nPreset.asString,
 		{|msg, time, addr, port|
-			if(writing_armed,
-				{save_all_settings.value(n_preset)},
-				{load_all_settings.value(n_preset)}
-			)
+			switch_group_control.value(nPreset - 1);
 		},
-		'/2/preset_mult_bank/' ++ n_preset.asString;
+		'/2/preset_mult_bank/' ++ nPreset.asString ++ '/1';
 	);
 });
-OSCdef.new(
-	\save_presets_resp,
-	{|msg, time, addr, port|
-		if (msg[1] == 1,
-			// {
-			// 	File.saveDialog(
-			// 		"Save current settings",
-			// 		"preset-0.yaml",
-			// 		{|fn| listToYAML.value(fn)},
-			// 		{}
-			// 	)
-			// },
-			{"SAVE_FILL_IN".postln},
-			{}
-		);
-	},
-	'/2/save_presets'
-);
-OSCdef.new(
-	\load_presets_resp,
-	{|msg, time, addr, port|
-		if (msg[1] == 1,
-			// {
-			// 	File.openDialog(
-			// 		"Load settings",
-			// 		{|fn| preset_arr = fromYAML.(fn)},
-			// 		{}
-			// )},
-			{"LOAD_FILL_IN".postln},
-			{}
-		)
-	},
-	'/2/load_presets'
-);
+
 
 // Effects
 OSCdef.new(
@@ -409,13 +451,49 @@ OSCdef.new(
 );
 
 
+// Set up the GUI for saving and loading
+/*
+h = 50;
+win = GUI.window.new("finchesizer",
+	Rect(100, 100, (h + 7) * 2, h + 10));
+win.view.decorator = FlowLayout(win.view.bounds);
+win.view.background = Color(0,0,0);
+win.front;
+btns = Array.newClear(2 * nPresets);
+b = Button(win, Rect(25, 25, h, h));
+b.states = [["load"]];
+b.action = {|val| load_preset_file.value};
+btns.put(0, b);
+b = Button(win, Rect(25, 25, h, h));
+b.states = [["save"]];
+b.action = {|val| savePresetFile.value};
+btns.put(1, b);
+*/
+
+
 ///// Rev up the finchesizers
 Task({
 	s.sync; // wait for the server
 	// x = Synth.tail(s, \finch);
-	// Eliminating the group like this makes it hard to apply bitcrushing
+
+	// Eliminating the group like this makes it harder to apply bitcrushing
 	x = Array.fill(n_synths, {Synth.new(\finch)});
+
+	// Load presets
+	presets.do({arg fname, i;
+		switch_group_control.value(i);
+		load_preset_file.value(preset_dir ++ fname);
+	});
+	switch_group_control.value(0);
+
 }).play;
+
+// preset_arr.do({arg subarr;
+// 	subarr.do({arg parmdict;
+// 		parmdict.postln;
+// 	});
+// });
+
 
 )
 
@@ -438,73 +516,3 @@ z.set(\damp, 0.6);
 z.free;
 */
 
-(
-var home = "~/".standardizePath;
-var fname = home ++ "Desktop/preset.txt";
-var toYAML, fromYAML, finch_defaults;
-finch_defaults = Dictionary[
-	\pressure -> 111,
-	\tension -> 1111,
-	\time_const -> 0,
-	\volume -> 0,
-	\pdepth -> 0,
-	\prate -> 0,
-	\tdepth -> 0,
-	\trate -> 0
-];
-
-toYAML.value(finch_defaults, fname);
-d = fromYAML.value(fname);
-)
-
-(
-var fname, fromYAML;
-
-fname = "~/".standardizePath ++ "Desktop/preset.txt";
-// d = fname.parseYAMLFile;
-// d[0]["pdepth"].postln;
-
-
-
-d = fromYAML.(fname);
-d[0][\pdepth]
-
-)
-
-
-(
-a = Dictionary[
-	\x -> 1,
-	\y -> 2];
-b = Array.fill(2, {a.copy});
-c = Array.fill(2, {b.copy});
-
-c[1][1][\x]
-)
-
-(
-n = NetAddr("127.0.0.1", 57120);
-// n.sendMsg('/2/preset_bank/1/1', 1);
-n.sendMsg('/2/load_presets', 1);
-)
-
-(
-var fromYAML;
-fromYAML = {arg fname;
-	var raw, cooked;
-	raw = fname.parseYAMLFile;
-	("Loading" + raw.size.asString + "presets...").postln;
-	cooked = Array.fill(raw.size, {|i|
-		var cooked_dict, raw_dict;
-		raw_dict = raw[i];
-		cooked_dict = Dictionary[];
-		raw_dict.keys.do({arg param_name;
-			cooked_dict[param_name.asSymbol] = raw_dict[param_name].asFloat;
-		});
-		cooked_dict
-	});
-};
-File.openDialog("Load presets", {|fn| d = fromYAML.(fn)}, {});
-)
-d
-d = 0;
