@@ -2,9 +2,10 @@
 
 MarkovSeq{
 	var go_func, node_values, n_nodes,
-	transition_mat,
+	<transition_mat, responders,
 	current_state, next_state,
-	run_task;
+	run_task,
+	adrsTouchOSC, adrsP5;
 	/*
 	*/
 
@@ -21,6 +22,7 @@ MarkovSeq{
 			n_nodes,
 			Array.fill(n_nodes ** 2, 0)
 		);
+		// responders = Array.newClear(node_vals ** 2);
 		current_state = 0;
 		next_state = 0;
 	}
@@ -37,7 +39,8 @@ MarkovSeq{
 		win.view.background = Color(0.15,0.15,0.1);
 		win.front;
 
-		// How many probability levels?
+		// Different colors for each level.
+		// Increase number of colors to make more probability steps.
 		// TouchOSC only supports binary -- on/off.
 		b_states = [
 			[" ", Color.white, Color.black],
@@ -45,9 +48,9 @@ MarkovSeq{
 
 		// Create the grid of buttons
 		(n_nodes ** 2).do({arg i;
-			var col, row, row_touchosc, xpos, ypos;
+			var col, row, rowTouch, xpos, ypos, msgTouch;
 			row = floor(i / n_nodes);
-			row_touchosc = n_nodes - row;
+			rowTouch = n_nodes - row;
 			col = mod(i, n_nodes);
 
 			// // Create the OSC messages
@@ -57,6 +60,7 @@ MarkovSeq{
 			// 		row_touchosc.asString ++ '/' ++
 			// 	(col + 1).asString)
 			// );
+			msgTouch = '/transmat/' ++ rowTouch.asString ++ '/' ++ (col + 1).asString;
 
 			xpos = (col * (b_width + b_space)) + b_space  + b_space;
 			ypos = (row * (b_width + b_space)) + b_space  + b_space;
@@ -76,13 +80,16 @@ MarkovSeq{
 			// // the GUI updates when you change things in TouchOSC.
 			// responders.put(i,
 			// 	OSCdef.new(
-			// 		'receiver' ++ touchOSC_msg[i],
+			// 		// 'receiver' ++ touchOSC_msg[i],
+			// 		'receiver' ++ msgTouch,
 			// 		{|msg, time, addr, port|
 			// 			// Update button grid in sclang and transition matrix
-			// 			{button_grid[i].value = msg[1]}.defer;
-			// 			transition_mat.put(row, col, msg[1]);
+			// 			// {button_grid[i].value = msg[1]}.defer;
+			// 			{btn.value = msg[1]}.defer;
+			// 			// transition_mat.put(row, col, msg[1]);
 			// 		},
-			// 		touchOSC_msg[i]
+			// 		// touchOSC_msg[i]
+			// 		msgTouch
 			// 	);
 			// );
 		});
@@ -92,8 +99,9 @@ MarkovSeq{
 		transition_mat[current, next] = prob;
 	}
 
-	// Take a step through the Markov chain
+
 	step{
+		// Take a step through the Markov chain
 		var tmat_str, out_val, probs, pass;
 		// Send a string of the transition matrix to Processing
 		// Format: "1,2,3;4,5,6;7,8,9;"
@@ -106,11 +114,12 @@ MarkovSeq{
 		out_val = node_values[current_state];
 		probs = transition_mat.rowAt(current_state);
 
-		// If there are no transitions here, pass...
+		// If there are no transitions from the current state,
+		// randomly select the next state.
 		if (probs == Array.fill(probs.size, 0),
 			{
 				'No transitions from this state.'.postln;
-				current_state = 0;
+				current_state = (0..(n_nodes - 1)).choose;
 			},{
 				probs = probs / sum(probs);
 				next_state = (0..(n_nodes - 1)).wchoose(probs);
@@ -122,14 +131,18 @@ MarkovSeq{
 	}
 
 	run{arg delta;
-		"Running...".postln;
+		// Let the chain run.
 		// delta : the amount of time between each cycle
+		//         Can be a function or a number.
 		run_task = Task({
 			loop {
 				this.step;
-				delta.yield;
+				if(delta.isNumber,
+					{delta.yield},
+					{delta.value.yield});
 			}
 		});
+		run_task.play;
 	}
 
 	pause{

@@ -13,9 +13,6 @@ m.createGUI;
 m.transition_mat
 
 m.step;
-m.run;
+m.run(0.25)
+m.run({((0..4)/4).choose});
 m.stop;
-(0..(3-1)) / (3-1)
-
-
-Color.new(*[1.0,1,1] * 0.2)

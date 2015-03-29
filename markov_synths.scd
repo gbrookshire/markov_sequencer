@@ -1,3 +1,5 @@
+// Look up how to use MarkovSynth
+
 (
 
 SynthDef(\singrain, { |freq = 440, amp = 0.2, sustain = 1,
