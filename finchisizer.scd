@@ -13,36 +13,25 @@ and taking the "inet" IP address, not "broadcast".
 Port (outgoing): 57120 (default for supercollider)
 Port (incoming): 58100
 
-*/
-
-
-// Change the interface for saving and loading.
-// Have presets saved individually, or as groups of synths to use at the same time.
-// Not as a bank of groups, which is what happens now.
-// Save and load these groups in separate files.
-// When writing/loading a preset, open a file dialog box.
-// *** Can't open a dialog box from OSC, probably because the processes are
-//     running on different threads. So loading and saving to disk will need
-//     to be done with a GUI on the host computer.
-
-/*
 Presets are loaded into the bank of presets in RAM.
 This is an array of arrays of dicts.
 Biggest array holds the presets available in RAM.
 Subarrays hold a group of synths.
 Each dict holds the settins for a single synth.
 
-Pressing 'save' on the TouchOSC GUI brings up a dialog box to save the current
-group to a YAML file.
-Pressing 'load' on TouchOSC GUI brings up a dialog box to load a group from a YAML file.
-*/
-
-
-/*
-Loading a group works! But now switching between groups doesn't work?
-Maybe the solution is to make a class...
+Pressing 'save' on the *Host computer* GUI brings up a dialog box
+to save the current group to a YAML file.
+Load presets by specifying adding the filename to the "presets" array.
 
 */
+
+// Figure out good ranges/scales for the control parameters.
+// Instead of changing the parameters from [0,1] to a useful range in the
+//    SynthDef, create a function to change those values. That way, we
+//    can save the meaningful values, instead of the TouchOSC parameters.
+// Call this function when going from TouchOSC to the parameter dictionaries,
+// which then get set into the synth. To go from preset dictionary values back
+// to [0,1] for TouchOSC, call `descale' on the control value.
 
 
 
@@ -62,17 +51,18 @@ var active_synth, active_group, finch_defaults, n_synths, nPresets;
 var switch_synth_control, switch_group_control;
 var update_touchosc_disp, update_synth_param, update_synths_in_group;
 var saveYAMLDict, saveYAML, loadYAML;
-var load_preset_file, load_presets_dialog, savePresetFile, activate_preset_group;
+var load_preset_file, load_presets_dialog, save_presets_dialog, activate_preset_group;
 var finch_param_arr; // Array of dicts -- a group of synths
 var preset_arr; // Array of Arrays of Dicts - for holding preset synth groups in RAM
 var save_synth_settings, load_synth_settings;
 var save_all_settings, load_group_settings;
 var win, btns;
 var presets, preset_dir;
+var rescale, descale;
 
 // Which presets to load on starting up the script
 preset_dir = "/Users/gbrookshire/Documents/projects/music/sc/markov_sequencer/presets/";
-presets = ["blank.yaml", "1.yaml", "2.yaml", "3.yaml"];
+presets = ["blank.yaml", "1.yaml", "2.yaml", "3.yaml", "low.yaml"];
 
 n_synths = 4;
 nPresets = 6;
@@ -95,6 +85,38 @@ preset_arr = Array.fill(nPresets, {finch_param_arr.copy});
 
 
 ///// Useful functions
+
+// Rescale parameters from [0,1] to a scale meaningful for the synth.
+rescale = {arg pname, val;
+	var scaling_funs;
+	scaling_funs = Dictionary[
+		\pressure -> {|x| x - 0.2},
+		\tension -> {|x| x - 0.2},
+		\time_const -> {|x| x.linexp(0, 1, 1000, 48000)},
+		\volume -> {|x| x * 6},
+		\pdepth -> {|x| x * 0.2},
+		\prate -> {|x| x.linexp(0, 1, 0.05, 50)},
+		\tdepth -> {|x| x * 0.2},
+		\trate -> {|x| x.linexp(0, 1, 0.05, 50)}
+	];
+	scaling_funs[pname].value(val)
+};
+// Go from meaningful values to [0,1] for TouchOSC
+descale = {arg pname, val;
+	var scaling_funs;
+	scaling_funs = Dictionary[
+		\pressure -> {|x| x + 0.2},
+		\tension -> {|x| x + 0.2},
+		\time_const -> {|x| x.explin(1000, 48000, 0, 1)},
+		\volume -> {|x| x / 6},
+		\pdepth -> {|x| x / 0.2},
+		\prate -> {|x| x.explin(0.05, 50, 0, 1)},
+		\tdepth -> {|x| x / 0.2},
+		\trate -> {|x| x.explin(0.05, 50, 0, 1)}
+	];
+	scaling_funs[pname].value(val)
+};
+
 
 // Update the parameter of a synth in the array and in the synth
 update_synth_param = {arg pname, pval;
@@ -160,6 +182,7 @@ update_touchosc_disp = {arg param_dict;
 			msg = '/1/tension_mod';
 			val = [param_dict[\trate], param_dict[\tdepth]];
 		}
+		{pname == \time_smooth} {}
 		{true} {("Param " + pname + " not known.").postln;};
 		if(val.isNil, {val = param_dict[pname]}, {});
 		adrs_touchOSC.sendMsg(msg, *val);
@@ -223,7 +246,15 @@ load_presets_dialog = {
 		{|fn| load_preset_file.value(fn)},
 		{}
 	);
-	finch_param_arr.postln;
+};
+
+save_presets_dialog = {
+	File.saveDialog(
+		"Save settings as preset",
+		"X.yaml",
+		{|fn| saveYAML.value(fn)},
+		{}
+	);
 };
 
 // activate_preset_group = {arg n_group;
@@ -246,12 +277,12 @@ load_presets_dialog = {
 load_synth_settings = {arg voice, preset_loc;
 	finch_param_arr[voice] = preset_arr[preset_loc, voice];
 };
-// Save all current to RAM
-save_all_settings = {arg preset_loc;
-	finch_param_arr.do({arg param_dict, i;
-		save_synth_settings.value(i, preset_loc);
-	});
-};
+// // Save all current to RAM
+// save_all_settings = {arg preset_loc;
+// 	finch_param_arr.do({arg param_dict, i;
+// 		save_synth_settings.value(i, preset_loc);
+// 	});
+// };
 // // Load all current to RAM
 // load_group_settings = {arg preset_loc;
 // 	active_group = preset_loc;
@@ -265,8 +296,8 @@ save_all_settings = {arg preset_loc;
 ///// Finchesizer
 
 SynthDef(\finch, {arg pressure=0, tension=0, time_const=0, volume=0,
-	pdepth=0, prate=0, tdepth=0, trate=0;
-	var sig, time_smooth;
+	pdepth=0, prate=0, tdepth=0, trate=0, time_smooth=0;
+	var sig;
 
 	// All control values from TouchOSC vary between 0 and 1.
 	// Adjust to meaningful values here.
@@ -279,7 +310,7 @@ SynthDef(\finch, {arg pressure=0, tension=0, time_const=0, volume=0,
 	tdepth = tdepth * 0.2;
 	trate = trate.linexp(0, 1, 0.05, 50);
 
-	time_smooth = 0.05; // smooth changes in control vals
+	time_smooth = time_smooth.linexp(0, 1, 0.05, 20); // smooth changes in control vals
 
 	sig = SyrinxL.ar(
 		freq:22050,
@@ -351,6 +382,19 @@ OSCdef.new(
 	},
 	'/1/tension_mod'
 );
+OSCdef.new(
+	\time_smooth_resp,
+	{|msg, time, addr, port|
+		var old_synth = active_synth;
+		(0..3).do({arg new_synth;
+			switch_synth_control.value(new_synth);
+			update_synth_param.(\time_smooth, msg[1]);
+		});
+		switch_synth_control.value(old_synth);
+	},
+	'/2/time_smooth'
+);
+
 
 // Responders for selecting which finchesizer to control
 (1..n_synths).do({arg n_finch;
@@ -381,7 +425,7 @@ OSCdef.new(
 );
 
 // Presets
-(1..nPresets).do({arg nPreset; // store all current settings
+(1..nPresets).do({arg nPreset; // Switch to a new preset.
 	OSCdef.new(
 		'pm_select_' ++ nPreset.asString,
 		{|msg, time, addr, port|
@@ -452,23 +496,18 @@ OSCdef.new(
 
 
 // Set up the GUI for saving and loading
-/*
 h = 50;
 win = GUI.window.new("finchesizer",
 	Rect(100, 100, (h + 7) * 2, h + 10));
 win.view.decorator = FlowLayout(win.view.bounds);
 win.view.background = Color(0,0,0);
 win.front;
-btns = Array.newClear(2 * nPresets);
-b = Button(win, Rect(25, 25, h, h));
-b.states = [["load"]];
-b.action = {|val| load_preset_file.value};
-btns.put(0, b);
-b = Button(win, Rect(25, 25, h, h));
-b.states = [["save"]];
-b.action = {|val| savePresetFile.value};
+btns = Array.newClear(2);
+b = Button(win, Rect(25, 25, 2*h, h));
+b.states = [["save as preset"]];
+b.action = {|val| save_presets_dialog.value};
 btns.put(1, b);
-*/
+
 
 
 ///// Rev up the finchesizers
@@ -487,13 +526,6 @@ Task({
 	switch_group_control.value(0);
 
 }).play;
-
-// preset_arr.do({arg subarr;
-// 	subarr.do({arg parmdict;
-// 		parmdict.postln;
-// 	});
-// });
-
 
 )
 
@@ -516,3 +548,5 @@ z.set(\damp, 0.6);
 z.free;
 */
 
+(
+)
