@@ -1,0 +1,36 @@
+- 
+  prate: 0.091788677016662
+  volume: 4.303030371666
+  time_const: 10943.573377803
+  tdepth: 0
+  tension: 0.46302764415741
+  trate: 0
+  pressure: 0.4129737496376
+  pdepth: 0.01395348906517
+- 
+  prate: 0
+  volume: 4.6515151262283
+  time_const: 23369.457588148
+  tdepth: 0
+  tension: 0.30363898277283
+  trate: 0
+  pressure: 0.18119533658028
+  pdepth: 0
+- 
+  prate: 3.111285991285
+  volume: 5.2575756311417
+  time_const: 12298.435676894
+  tdepth: 0
+  tension: 0.22503640055656
+  trate: 0
+  pressure: 0.18265305757523
+  pdepth: 0.010077519714832
+- 
+  prate: 6.5623651999238
+  volume: 4.954545378685
+  time_const: 24534.078411146
+  tdepth: 0
+  tension: 0.31164484024048
+  trate: 0
+  pressure: 0.31530611515045
+  pdepth: 0.036434108018875

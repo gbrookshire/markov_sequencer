@@ -32,10 +32,9 @@ Load presets by specifying adding the filename to the "presets" array.
 // Call this function when going from TouchOSC to the parameter dictionaries,
 // which then get set into the synth. To go from preset dictionary values back
 // to [0,1] for TouchOSC, call `descale' on the control value.
-
-
-
 // Values sent back to TouchOSC need to be in the interval [0,1].
+// Kind of working...
+//     - doesn't display the right values on TouchOSC
 
 
 // Add pan?
@@ -63,6 +62,7 @@ var rescale, descale;
 // Which presets to load on starting up the script
 preset_dir = "/Users/gbrookshire/Documents/projects/music/sc/markov_sequencer/presets/";
 presets = ["blank.yaml", "1.yaml", "2.yaml", "3.yaml", "low.yaml"];
+presets = ["test.yaml"];
 
 n_synths = 4;
 nPresets = 6;
@@ -73,7 +73,7 @@ adrs_touchOSC = NetAddr("192.168.1.139", 58100);
 finch_defaults = Dictionary[
 	\pressure -> 0,
 	\tension -> 0,
-	\time_const -> 0,
+	\time_const -> 1000,
 	\volume -> 0,
 	\pdepth -> 0,
 	\prate -> 0,
@@ -119,18 +119,27 @@ descale = {arg pname, val;
 
 
 // Update the parameter of a synth in the array and in the synth
-update_synth_param = {arg pname, pval;
+update_synth_param = {arg pname, pval, rescale_vals=true;
+	var new_val;
+	if(rescale_vals,
+		{new_val = rescale.(pname, pval)},
+		{new_val = pval}
+	);
 	// Update the array of parameters
-	finch_param_arr[active_synth].put(pname, pval);
+	finch_param_arr[active_synth].put(pname, new_val);
 	// Update the synth
-	x[active_synth].set(pname.asSymbol, pval);
+	x[active_synth].set(pname.asSymbol, new_val);
 };
+
 update_synths_in_group = {
 	var prev_active = active_synth;
 	(0..3).do({arg n_synth; // Loop through synths in the group
 		active_synth = n_synth;
 		finch_param_arr[active_synth].keys.do({arg pname;
-			update_synth_param.value(pname, finch_param_arr[n_synth][pname]);
+			update_synth_param.value(
+				pname,
+				finch_param_arr[n_synth][pname],
+				rescale_vals:false);
 		})
 	});
 	active_synth = prev_active;
@@ -185,6 +194,8 @@ update_touchosc_disp = {arg param_dict;
 		{pname == \time_smooth} {}
 		{true} {("Param " + pname + " not known.").postln;};
 		if(val.isNil, {val = param_dict[pname]}, {});
+		val = val.do({|v| descale.value(pname, v)});
+		msg.post; " - ".post; val.postln;
 		adrs_touchOSC.sendMsg(msg, *val);
 	});
 };
@@ -295,12 +306,15 @@ load_synth_settings = {arg voice, preset_loc;
 
 ///// Finchesizer
 
-SynthDef(\finch, {arg pressure=0, tension=0, time_const=0, volume=0,
+SynthDef(\finch, {arg pressure=0, tension=0, time_const=1000, volume=0,
 	pdepth=0, prate=0, tdepth=0, trate=0, time_smooth=0;
+	// May have to change the default vals to get this to work.
 	var sig;
 
+	/*
 	// All control values from TouchOSC vary between 0 and 1.
 	// Adjust to meaningful values here.
+	// **** REPLACE WITH rescale/descale FUNCTIONS. ****
 	pressure = pressure - 0.02;
 	tension = tension - 0.02;
 	time_const = time_const.linexp(0, 1, 1000, 48000);
@@ -309,6 +323,7 @@ SynthDef(\finch, {arg pressure=0, tension=0, time_const=0, volume=0,
 	prate = prate.linexp(0, 1, 0.05, 50);
 	tdepth = tdepth * 0.2;
 	trate = trate.linexp(0, 1, 0.05, 50);
+	*/
 
 	time_smooth = time_smooth.linexp(0, 1, 0.05, 20); // smooth changes in control vals
 
@@ -385,12 +400,7 @@ OSCdef.new(
 OSCdef.new(
 	\time_smooth_resp,
 	{|msg, time, addr, port|
-		var old_synth = active_synth;
-		(0..3).do({arg new_synth;
-			switch_synth_control.value(new_synth);
-			update_synth_param.(\time_smooth, msg[1]);
-		});
-		switch_synth_control.value(old_synth);
+		x.do({|snth| snth.set(\time_smooth, msg[1])});
 	},
 	'/2/time_smooth'
 );
@@ -549,4 +559,20 @@ z.free;
 */
 
 (
+var descale;
+descale = {arg pname, val;
+	var scaling_funs;
+	scaling_funs = Dictionary[
+		\pressure -> {|x| x + 0.2},
+		\tension -> {|x| x + 0.2},
+		\time_const -> {|x| x.explin(1000, 48000, 0, 1)},
+		\volume -> {|x| x / 6},
+		\pdepth -> {|x| x / 0.2},
+		\prate -> {|x| x.explin(0.05, 50, 0, 1)},
+		\tdepth -> {|x| x / 0.2},
+		\trate -> {|x| x.explin(0.05, 50, 0, 1)}
+	];
+	scaling_funs[pname].value(val)
+};
+descale.value(\pdepth, 0.01395348906517)
 )
