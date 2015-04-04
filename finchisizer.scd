@@ -61,7 +61,7 @@ var rescale, descale;
 
 // Which presets to load on starting up the script
 preset_dir = "/Users/gbrookshire/Documents/projects/music/sc/markov_sequencer/presets/";
-presets = ["test.yaml", "blank.yaml"];
+presets = ["test.yaml"];
 
 n_synths = 4;
 nPresets = 6;
@@ -133,9 +133,7 @@ update_synth_param = {arg pname, pval, rescale_vals=true;
 update_synths_in_group = {
 	var prev_active = active_synth;
 	n_synths.do({arg n_synth; // Loop through synths in the group
-		// n_synth.postln;
 		active_synth = n_synth;
-		// switch_synth_control.value(n_synth);
 		finch_param_arr[active_synth].keys.do({arg pname;
 			update_synth_param.value(
 				pname,
@@ -159,7 +157,6 @@ switch_synth_control = {arg new_synth;
 
 // Change to a different preset group
 switch_group_control = {arg new_group;
-	("Activating synth group" + new_group.asString).postln;
 	finch_param_arr = preset_arr[new_group];
 	active_group = new_group;
 	update_synths_in_group.value;
@@ -206,12 +203,7 @@ saveYAML = {arg fname;
 };
 loadYAML = {arg fname;
 	var raw, cooked;
-	if (not(fname.endsWith(".yaml")),
-		{"Chosen file is not a .yaml file.".warn},
-		{}
-	);
 	raw = fname.parseYAMLFile;
-	("Loading" + raw.size.asString + "presets...").postln;
 	cooked = Array.fill(raw.size, {|i|
 		var cooked_dict, raw_dict;
 		raw_dict = raw[i];
@@ -226,7 +218,10 @@ loadYAML = {arg fname;
 load_preset_file = {arg fn;
 	var file_cont, msg;
 	// Function that does something to a filename string.
-	fn.postln;
+	if(not(File.existsCaseSensitive(fn)),
+		{("Preset does not exist. Check file path.").error;},
+		{}
+	);
 	file_cont = loadYAML.(fn);
 	preset_arr[active_group] = file_cont;
 	finch_param_arr = file_cont;
@@ -295,25 +290,8 @@ load_synth_settings = {arg voice, preset_loc;
 
 SynthDef(\finch, {arg pressure=0, tension=0, time_const=1000, volume=0,
 	pdepth=0, prate=0, tdepth=0, trate=0, time_smooth=0;
-	// May have to change the default vals to get this to work.
 	var sig;
-
-	/*
-	// All control values from TouchOSC vary between 0 and 1.
-	// Adjust to meaningful values here.
-	// **** REPLACE WITH rescale/descale FUNCTIONS. ****
-	pressure = pressure - 0.02;
-	tension = tension - 0.02;
-	time_const = time_const.linexp(0, 1, 1000, 48000);
-	volume = volume * 6;
-	pdepth = pdepth * 0.2;
-	prate = prate.linexp(0, 1, 0.05, 50);
-	tdepth = tdepth * 0.2;
-	trate = trate.linexp(0, 1, 0.05, 50);
-	*/
-
 	time_smooth = time_smooth.linexp(0, 1, 0.05, 20); // smooth changes in control vals
-
 	sig = SyrinxL.ar(
 		freq:22050,
 		a: pressure.lag(time_smooth) + SinOsc.kr(prate, mul:pdepth),
@@ -391,7 +369,6 @@ OSCdef.new(
 	},
 	'/2/time_smooth'
 );
-
 
 // Responders for selecting which finchesizer to control
 (1..n_synths).do({arg n_finch;
@@ -515,12 +492,13 @@ Task({
 	// Eliminating the group like this makes it harder to apply bitcrushing
 	x = Array.fill(n_synths, {Synth.new(\finch)});
 
-	// // Load presets
-	// presets.do({arg fname, i;
-	// 	switch_group_control.value(i);
-	// 	load_preset_file.value(preset_dir ++ fname);
-	// });
-	// switch_group_control.value(0);
+	// Load presets
+	presets.do({arg fname, i;
+		// ("Loading" + fname + i.asString).postln;
+		switch_group_control.value(i);
+		load_preset_file.value(preset_dir ++ fname);
+	});
+	switch_group_control.value(0);
 
 }).play;
 
