@@ -13,8 +13,9 @@ and taking the "inet" IP address, not "broadcast".
 Port (outgoing): 57120 (default for supercollider)
 Port (incoming): 58100
 
+---- Presets are not working.
 Presets are loaded into the bank of presets in RAM.
-This is an array of arrays of dicts.
+This is an array of arrays of dictionaries.
 Biggest array holds the presets available in RAM.
 Subarrays hold a group of synths.
 Each dict holds the settins for a single synth.
@@ -33,8 +34,7 @@ Load presets by specifying adding the filename to the "presets" array.
 // which then get set into the synth. To go from preset dictionary values back
 // to [0,1] for TouchOSC, call `descale' on the control value.
 // Values sent back to TouchOSC need to be in the interval [0,1].
-// Kind of working...
-//     - doesn't display the right values on TouchOSC
+// Screen updating works!
 
 
 // Add pan?
@@ -61,8 +61,7 @@ var rescale, descale;
 
 // Which presets to load on starting up the script
 preset_dir = "/Users/gbrookshire/Documents/projects/music/sc/markov_sequencer/presets/";
-presets = ["blank.yaml", "1.yaml", "2.yaml", "3.yaml", "low.yaml"];
-presets = ["test.yaml"];
+presets = ["test.yaml", "blank.yaml"];
 
 n_synths = 4;
 nPresets = 6;
@@ -133,8 +132,10 @@ update_synth_param = {arg pname, pval, rescale_vals=true;
 
 update_synths_in_group = {
 	var prev_active = active_synth;
-	(0..3).do({arg n_synth; // Loop through synths in the group
+	n_synths.do({arg n_synth; // Loop through synths in the group
+		// n_synth.postln;
 		active_synth = n_synth;
+		// switch_synth_control.value(n_synth);
 		finch_param_arr[active_synth].keys.do({arg pname;
 			update_synth_param.value(
 				pname,
@@ -174,30 +175,16 @@ switch_group_control = {arg new_group;
 
 // Update display on TouchOSC to show params of active synth
 update_touchosc_disp = {arg param_dict;
-	param_dict.keys.do({arg pname;
-		var msg, val;
-		case
-		{pname == \volume} {msg = '/1/volume'}
-		{pname == \time_const} {msg = '/1/time_const'}
-		{or(pname == \pressure, pname == \tension)} {
-			msg = '/1/xy';
-			val = [param_dict[\pressure], param_dict[\pressure]];
-		}
-		{or(pname == \prate, pname == \pdepth)} {
-			msg = '/1/pressure_mod';
-			val = [param_dict[\prate], param_dict[\pdepth]];
-		}
-		{or(pname == \trate, pname == \tdepth)} {
-			msg = '/1/tension_mod';
-			val = [param_dict[\trate], param_dict[\tdepth]];
-		}
-		{pname == \time_smooth} {}
-		{true} {("Param " + pname + " not known.").postln;};
-		if(val.isNil, {val = param_dict[pname]}, {});
-		val = val.do({|v| descale.value(pname, v)});
-		msg.post; " - ".post; val.postln;
-		adrs_touchOSC.sendMsg(msg, *val);
-	});
+	var	snd, ds;
+	snd = {|msg, val| adrs_touchOSC.sendMsg(msg, *val)};
+	ds = {|pname| descale.value(pname, param_dict[pname])};
+
+	snd.('/1/volume', ds.(\volume));
+	snd.('/1/time_const', ds.(\time_const));
+	snd.('/1/xy', [ds.(\tension), ds.(\pressure)]);
+	snd.('/1/pressure_mod', [ds.(\prate), ds.(\pdepth)]);
+	snd.('/1/tension_mod', [ds.(\trate), ds.(\tdepth)]);
+
 };
 
 // Read and write as YAML files.
@@ -528,12 +515,12 @@ Task({
 	// Eliminating the group like this makes it harder to apply bitcrushing
 	x = Array.fill(n_synths, {Synth.new(\finch)});
 
-	// Load presets
-	presets.do({arg fname, i;
-		switch_group_control.value(i);
-		load_preset_file.value(preset_dir ++ fname);
-	});
-	switch_group_control.value(0);
+	// // Load presets
+	// presets.do({arg fname, i;
+	// 	switch_group_control.value(i);
+	// 	load_preset_file.value(preset_dir ++ fname);
+	// });
+	// switch_group_control.value(0);
 
 }).play;
 
