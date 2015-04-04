@@ -1,28 +1,29 @@
 /* Finchesizer
 
 To use:
-- Boot up the server.
-- Change adrs_touchOSC to the IP address of the tablet.
-("Local IP address" on TouchOSC)
+- Boot up the server (CMD-B).
+- Change the variable adrs_touchOSC to the IP address of the tablet.
+--- "Local IP address" on TouchOSC.
 - Then execute the main block of code.
+--- CMD-. in the main code, or in the toolbar: Language -> Evaluate File.
 
 In TouchOSC (on the tablet), fix these settings:
 Host: the IP address of the computer running SuperCollider.
-- On a Mac, you can get that with "ifconfig en1" in Terminal,
-and taking the "inet" IP address, not "broadcast".
+- On a Mac, you can get that by entering "ifconfig en1" in Terminal,
+---- and taking the "inet" IP address, not "broadcast".
 Port (outgoing): 57120 (default for supercollider)
 Port (incoming): 58100
 
----- Presets are not working.
-Presets are loaded into the bank of presets in RAM.
-This is an array of arrays of dictionaries.
-Biggest array holds the presets available in RAM.
-Subarrays hold a group of synths.
-Each dict holds the settins for a single synth.
+To choose presets, change the variable called "presets" to have double-quoted
+names of the preset files in square brackets. E.g. ["pre1.yaml", "pre2.yaml"];
+The program will look for presets in the folder specified in preset_dir.
+If these aren't entered correctly (case-sensitive), the program will puke.
 
-Pressing 'save' on the *Host computer* GUI brings up a dialog box
-to save the current group to a YAML file.
-Load presets by specifying adding the filename to the "presets" array.
+To save presets, press 'save as preset' on the *Host computer* GUI.
+This brings up a dialog box to save the current group to a YAML file.
+Load presets by adding the filename to the "presets" array.
+
+If everything gets confused, reboot the interpreter and the server.
 
 */
 
@@ -35,6 +36,13 @@ Load presets by specifying adding the filename to the "presets" array.
 // to [0,1] for TouchOSC, call `descale' on the control value.
 // Values sent back to TouchOSC need to be in the interval [0,1].
 // Screen updating works!
+
+// Presets are loaded into the bank of presets in RAM.
+// This is an array of arrays of dictionaries.
+// Biggest array holds the presets available in RAM.
+// Subarrays hold a group of synths.
+// Each dict holds the settins for a single synth.
+
 
 
 // Add pan?
@@ -53,21 +61,21 @@ var saveYAMLDict, saveYAML, loadYAML;
 var load_preset_file, load_presets_dialog, save_presets_dialog, activate_preset_group;
 var finch_param_arr; // Array of dicts -- a group of synths
 var preset_arr; // Array of Arrays of Dicts - for holding preset synth groups in RAM
-var save_synth_settings, load_synth_settings;
-var save_all_settings, load_group_settings;
 var win, btns;
 var presets, preset_dir;
 var rescale, descale;
 
+// IP address of the iPad
+adrs_touchOSC = NetAddr("192.168.1.139", 58100);
+
 // Which presets to load on starting up the script
 preset_dir = "/Users/gbrookshire/Documents/projects/music/sc/markov_sequencer/presets/";
-presets = ["test.yaml"];
+presets = ["rumples.yaml", "sirens.yaml", "test.yaml"];
 
 n_synths = 4;
 nPresets = 6;
 active_synth = 0; // Which finch is being controlled by TouchOSC
 active_group = 0; // Which preset group is active now
-adrs_touchOSC = NetAddr("192.168.1.139", 58100);
 
 finch_defaults = Dictionary[
 	\pressure -> 0,
@@ -115,7 +123,6 @@ descale = {arg pname, val;
 	];
 	scaling_funs[pname].value(val)
 };
-
 
 // Update the parameter of a synth in the array and in the synth
 update_synth_param = {arg pname, pval, rescale_vals=true;
@@ -217,7 +224,6 @@ loadYAML = {arg fname;
 
 load_preset_file = {arg fn;
 	var file_cont, msg;
-	// Function that does something to a filename string.
 	if(not(File.existsCaseSensitive(fn)),
 		{("Preset does not exist. Check file path.").error;},
 		{}
@@ -250,48 +256,13 @@ save_presets_dialog = {
 	);
 };
 
-// activate_preset_group = {arg n_group;
-// 	("Activate preset" + n_group.asString).postln;
-// 	load_group_settings.value(n_group);
-// 	// Activate LED to show which preset is being used.
-// 	// Turn off other LEDs.
-// 	// address: /2/led1 through /2/led6
-// 	(1..6).do({|i|
-// 		adrs_touchOSC.sendMsg('/2/led' ++ i.asSymbol, 0);
-// 	});
-// 	adrs_touchOSC.sendMsg('/2/led' ++ n_group.asSymbol, 1);
-// };
-
-// // Save to RAM
-// save_synth_settings = {arg voice, preset_loc;
-// 	preset_arr[preset_loc][voice] = finch_param_arr[voice];
-// };
-// Load from RAM
-load_synth_settings = {arg voice, preset_loc;
-	finch_param_arr[voice] = preset_arr[preset_loc, voice];
-};
-// // Save all current to RAM
-// save_all_settings = {arg preset_loc;
-// 	finch_param_arr.do({arg param_dict, i;
-// 		save_synth_settings.value(i, preset_loc);
-// 	});
-// };
-// // Load all current to RAM
-// load_group_settings = {arg preset_loc;
-// 	active_group = preset_loc;
-// 	update_synths_in_group.value;
-// 	// finch_param_arr.do({arg param_dict, i;
-// 	// 	load_synth_settings.value(i, preset_loc);
-// 	// });
-// };
-
 
 ///// Finchesizer
 
 SynthDef(\finch, {arg pressure=0, tension=0, time_const=1000, volume=0,
 	pdepth=0, prate=0, tdepth=0, trate=0, time_smooth=0;
 	var sig;
-	time_smooth = time_smooth.linexp(0, 1, 0.05, 20); // smooth changes in control vals
+	time_smooth = time_smooth * 60; // smooth changes in control vals
 	sig = SyrinxL.ar(
 		freq:22050,
 		a: pressure.lag(time_smooth) + SinOsc.kr(prate, mul:pdepth),
@@ -494,7 +465,6 @@ Task({
 
 	// Load presets
 	presets.do({arg fname, i;
-		// ("Loading" + fname + i.asString).postln;
 		switch_group_control.value(i);
 		load_preset_file.value(preset_dir ++ fname);
 	});
@@ -502,42 +472,4 @@ Task({
 
 }).play;
 
-)
-
-/*
-// Test out the finchesizer
-x = Synth.tail(s, \finch);
-x[0].set(\pressure, 0.5);
-x[0].set(\tension, 0.1);
-x[0].set(\volume, 0.6);
-x[0].free;
-
-// Set up effects in a chain like this.
-y = Synth.tail(s, \bitcrusher, [\bit_depth, 1, \bit_rate, 100]);
-y.free;
-
-z = Synth.tail(s, \verb);
-z.set(\mix, 0.8);
-z.set(\room, 0.1);
-z.set(\damp, 0.6);
-z.free;
-*/
-
-(
-var descale;
-descale = {arg pname, val;
-	var scaling_funs;
-	scaling_funs = Dictionary[
-		\pressure -> {|x| x + 0.2},
-		\tension -> {|x| x + 0.2},
-		\time_const -> {|x| x.explin(1000, 48000, 0, 1)},
-		\volume -> {|x| x / 6},
-		\pdepth -> {|x| x / 0.2},
-		\prate -> {|x| x.explin(0.05, 50, 0, 1)},
-		\tdepth -> {|x| x / 0.2},
-		\trate -> {|x| x.explin(0.05, 50, 0, 1)}
-	];
-	scaling_funs[pname].value(val)
-};
-descale.value(\pdepth, 0.01395348906517)
 )
