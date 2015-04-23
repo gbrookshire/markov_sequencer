@@ -27,6 +27,11 @@ If everything gets confused, reboot the interpreter and the server.
 
 */
 
+
+// To do:
+// Master volume and more presets
+
+
 // Figure out good ranges/scales for the control parameters.
 // Instead of changing the parameters from [0,1] to a useful range in the
 //    SynthDef, create a function to change those values. That way, we
@@ -66,11 +71,12 @@ var presets, preset_dir;
 var rescale, descale;
 
 // IP address of the iPad
-adrs_touchOSC = NetAddr("192.168.1.139", 58100);
+adrs_touchOSC = NetAddr("10.150.105.207", 58100);
 
 // Which presets to load on starting up the script
 preset_dir = "/Users/gbrookshire/Documents/projects/music/sc/markov_sequencer/presets/";
-presets = ["rumples.yaml", "sirens.yaml", "test.yaml"];
+presets = ["blank.yaml", "rumples.yaml", "sirens.yaml",
+	"oboe_c.yaml", "beginning_rumble.yaml"];
 
 n_synths = 4;
 nPresets = 6;
