@@ -71,8 +71,7 @@ var presets, preset_dir;
 var rescale, descale;
 
 // IP address of the iPad
-adrs_touchOSC = NetAddr("10.150.105.207", 58100);
-
+adrs_touchOSC = NetAddr("10.150.99.140", 58100);
 // Which presets to load on starting up the script
 preset_dir = "/Users/gbrookshire/Documents/projects/music/sc/markov_sequencer/presets/";
 presets = ["blank.yaml", "rumples.yaml", "sirens.yaml",

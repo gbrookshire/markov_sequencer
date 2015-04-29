@@ -14,11 +14,11 @@ SynthDef(\singrain, { |freq = 440, amp = 0.2, sustain = 1,
 	sig = SinOsc.ar(freq, mul:amp);
 	sig = sig * LFNoise0.ar(bit_click_rate);
 
-	// Reduce the sampling rate
-	sig = Latch.ar(sig, SinOsc.ar(LFNoise2.kr(freq:0.1, mul:5000, add:5000)));
-	// Reduce the bit depth
-	bit_depth = {10.rand + 1}.value;
-	sig = ((sig * (2 ** bit_depth)).round) / (2 ** bit_depth);
+	// // Reduce the sampling rate
+	// sig = Latch.ar(sig, SinOsc.ar(LFNoise2.kr(freq:0.1, mul:5000, add:5000)));
+	// // Reduce the bit depth
+	// bit_depth = {10.rand + 1}.value;
+	// sig = ((sig * (2 ** bit_depth)).round) / (2 ** bit_depth);
 
 	// Apply some reverb
 	sig = FreeVerb.ar(sig, mix:0.1);

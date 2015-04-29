@@ -1,4 +1,4 @@
-/*
+ /*
 A Markovian sequencer. The grid of buttons shows a transition matrix.
 Push buttons multiple times to give higher probabilities.
 
@@ -18,7 +18,7 @@ and row 1 is the bottom row, instead of the top as in this script.
 
 (
 var adrs_P5 = NetAddr("127.0.0.1", 9000); // Send OSC to Processing.
-var adrs_touchOSC = NetAddr("192.168.1.139", 58100); // Send to TouchOSC
+var adrs_touchOSC = NetAddr("10.150.99.140", 58100); // Send to TouchOSC
 
 var win, window_size;
 var b_width, b_space, b_states, button_grid; // button variables

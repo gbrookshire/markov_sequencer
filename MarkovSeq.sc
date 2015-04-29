@@ -1,13 +1,13 @@
-// Rewriting the Markov chain sequencer as a self-contained class.
+// Markov chain sequencer as a self-contained class.
 
 MarkovSeq{
 	var go_func, node_values, n_nodes,
-	<transition_mat, responders,
+	>timing_func,
+	<transition_mat,
+	responders, buttons,
 	current_state, next_state,
-	run_task,
+	run_task, touch_prefix,
 	adrsTouchOSC, adrsP5;
-	/*
-	*/
 
 	*new{arg exec_func, node_vals;
 		^super.new.init(exec_func, node_vals);
@@ -22,9 +22,41 @@ MarkovSeq{
 			n_nodes,
 			Array.fill(n_nodes ** 2, 0)
 		);
-		// responders = Array.newClear(node_vals ** 2);
+		responders = Array.newClear(node_vals.size ** 2);
+		buttons = Array.newClear(node_vals.size ** 2);
 		current_state = 0;
 		next_state = 0;
+		timing_func = 1;
+	}
+
+	initTouchOSC{arg touchAddress, touchPort, touchPrefix;
+		// touchPrefix : the prefix of the TouchOSC addresses,
+		//               appeded to all the addresses to/from TouchOSC.
+		//               This allows multiple markov sequencers on different
+		//               pages, for example.
+		adrsTouchOSC = NetAddr(touchAddress, touchPort);
+		touch_prefix = touchPrefix;
+		touch_prefix.postln;
+		OSCdef.new(
+			\advance_resp,
+			{|msg, time, addr, port|
+				if (msg[1] == 1, {{this.step}.defer;}, {} );
+			},
+			touch_prefix ++ '/advance'
+		);
+
+		// Push and hold to run through the matrix
+		OSCdef.new(
+			\start_resp,
+			{|msg, time, addr, port|
+				if (msg[1] == 1,
+					{{this.run}.defer;},
+					{{this.pause}.defer;}
+				);
+			},
+			touch_prefix ++ '/start'
+		);
+
 	}
 
 	createGUI{
@@ -52,16 +84,9 @@ MarkovSeq{
 			row = floor(i / n_nodes);
 			rowTouch = n_nodes - row;
 			col = mod(i, n_nodes);
+			msgTouch = touch_prefix ++ '/transmat/' ++ rowTouch ++ '/' ++ (col + 1);
 
-			// // Create the OSC messages
-			// touchOSC_msg.put(
-			// 	i,
-			// 	('/transmat/' ++
-			// 		row_touchosc.asString ++ '/' ++
-			// 	(col + 1).asString)
-			// );
-			msgTouch = '/transmat/' ++ rowTouch.asString ++ '/' ++ (col + 1).asString;
-
+			// Set up buttons that update the TouchOSC display when pressed
 			xpos = (col * (b_width + b_space)) + b_space  + b_space;
 			ypos = (row * (b_width + b_space)) + b_space  + b_space;
 			btn = GUI.button.new(win, Rect(xpos, ypos, b_width, b_width));
@@ -72,26 +97,21 @@ MarkovSeq{
 				new_val = mod(old_val + 1, b_states.size);
 				transition_mat.put(row, col, new_val);
 				// Send updated value to TouchOSC
-				// adrs_touchOSC.sendMsg(touchOSC_msg[i], view.value);
+				adrsTouchOSC.sendMsg(msgTouch, view.value);
 			};
-			// button_grid.put(i, btn);
+			buttons.put(i, btn);
 
-			// // Initialize the OSC responder nodes so that
-			// // the GUI updates when you change things in TouchOSC.
-			// responders.put(i,
-			// 	OSCdef.new(
-			// 		// 'receiver' ++ touchOSC_msg[i],
-			// 		'receiver' ++ msgTouch,
-			// 		{|msg, time, addr, port|
-			// 			// Update button grid in sclang and transition matrix
-			// 			// {button_grid[i].value = msg[1]}.defer;
-			// 			{btn.value = msg[1]}.defer;
-			// 			// transition_mat.put(row, col, msg[1]);
-			// 		},
-			// 		// touchOSC_msg[i]
-			// 		msgTouch
-			// 	);
-			// );
+			// Receive messages from TouchOSC. Update the transition matrix.
+			responders.put(i,
+				OSCdef.new(
+					'receiver_' ++ msgTouch,
+					{|msg, time, addr, port|
+						{buttons[i].value = msg[1]}.defer;
+						transition_mat.put(row, col, msg[1]);
+					},
+					msgTouch
+				);
+			);
 		});
 	}
 
@@ -130,16 +150,16 @@ MarkovSeq{
 		);
 	}
 
-	run{arg delta;
+	run{
 		// Let the chain run.
 		// delta : the amount of time between each cycle
 		//         Can be a function or a number.
 		run_task = Task({
 			loop {
 				this.step;
-				if(delta.isNumber,
-					{delta.yield},
-					{delta.value.yield});
+				if(timing_func.isNumber,
+					{timing_func.yield},
+					{timing_func.value.yield});
 			}
 		});
 		run_task.play;
@@ -153,9 +173,4 @@ MarkovSeq{
 		run_task.stop;
 	}
 
-	sendTouchOSC{
-	}
-
-	sendProcessing{
-	}
 }
