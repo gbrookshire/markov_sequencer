@@ -1,5 +1,3 @@
-
-
 (
 // Echoing thump, modulated by mouse position
 SynthDef(\thump, {arg placeholder=1;
@@ -46,8 +44,6 @@ SynthDef(\click, {|out = 0, freq=440, parm=1|
 
 	Out.ar([0, 1], sig * env);
 }).add;
-
-
 
 )
 
