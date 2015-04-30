@@ -3,7 +3,7 @@ var samp_dir, fnames, playback_rates, buf_arr;
 ~node_functions = (0..7);
 
 // 8 pitches in one whole step, starting at 0.25 of normal playback.
-~playback_rates = 1 * (2 ** (((1..8) / 8) * 200 / 1200));
+~playback_rates = 0.2 * (2 ** (((1..8) / 8) * 200 / 1200));
 
 fnames = ['1', '2'];
 samp_dir = '/Users/gbrookshire/Documents/projects/music/sc/sampler/bell/';
@@ -14,7 +14,7 @@ fnames.do({|name|
 
 SynthDef(\playBuf, {|bufnum = 0, attack = 0.001, rate = 1, pan = 0 |
 	var scaledRate, player, env;
-	scaledRate = rate * BufRateScale.kr(bufnum);
+	scaledRate = rate * LFNoise2.kr(freq:1, mul:1) * BufRateScale.kr(bufnum);
 	env = EnvGen.kr(
 		Env(levels:[0,1,0], times:[attack, 7 * attack], curve:'lin'),
 		doneAction:2);
