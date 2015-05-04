@@ -12,7 +12,7 @@ SynthDef(\thump, {arg p1=1, p2=100; // p1: MouseX, p2: MouseY
 }).add;
 
 // simple bass drum
-SynthDef(\kick, {|out = 0, bRelease = 1, b_freq = 10|
+SynthDef(\kick, {|bRelease=1, b_freq=10|
 	var env_body, env_pop, env_click,
 	bass, body, pop, click,
 	body_freq, pop_speed;
@@ -46,9 +46,24 @@ SynthDef(\click, {|out = 0, freq=440, decay=0.01, parm=1|
 }).add;
 )
 
+(
+// Flutter
+var tsk;
+tsk = Task({
+	var delta = 0.04;
+	loop {
+		Synth(\kick, [\bRelease, rrand(0.8, 1.5), \b_freq, rrand(20, 40)]);
+		delta = delta * rrand(1.0, 1.2);
+		if (delta > 0.15, {tsk.stop}, {});
+		delta.yield;
+	}
+});
+tsk.play;
+)
+
 
 Synth(\thump);
-Synth(\kick, [\bRelease, 1, \b_freq, 10]);
+Synth(\kick, [\bRelease, 1, \b_freq, 40]);
 Synth(\click, [\freq, rrand(220, 880), \parm, rrand(0.5, 5)]);
 
 
