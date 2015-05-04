@@ -3,7 +3,7 @@
 MarkovSeq{
 	var go_func, node_values, n_nodes,
 	>timing_func,
-	<transition_mat,
+	<>transition_mat,
 	responders, buttons,
 	current_state, next_state,
 	run_task, touch_prefix,
@@ -139,7 +139,8 @@ MarkovSeq{
 		if (probs == Array.fill(probs.size, 0),
 			{
 				'No transitions from this state.'.postln;
-				current_state = (0..(n_nodes - 1)).choose;
+				// current_state = (0..(n_nodes - 1)).choose;
+				current_state = 0;
 			},{
 				probs = probs / sum(probs);
 				next_state = (0..(n_nodes - 1)).wchoose(probs);
