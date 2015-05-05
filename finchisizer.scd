@@ -66,11 +66,10 @@ var presets, preset_dir;
 var rescale, descale;
 
 // IP address of the iPad
-adrs_touchOSC = NetAddr("192.168.1.139", 58100);
+adrs_touchOSC = NetAddr("10.150.103.77", 58100);
 // Which presets to load on starting up the script
-preset_dir = "/Users/gbrookshire/Documents/projects/music/sc/markov_sequencer/presets/";
-presets = ["blank.yaml", "rumples.yaml", "sirens.yaml",
-	"oboe_c.yaml", "beginning_rumble.yaml", "beginning.yaml"];
+preset_dir = "/Users/gbrookshire/Documents/projects/music/sc/markov_sequencer/perform_presets/";
+presets = ["blank.yaml", "oboe_c.yaml", "oboe_c_new.yaml", "beginning_withvolume.yaml"];
 
 n_synths = 4;
 nPresets = 6;
@@ -286,7 +285,7 @@ SynthDef(\bitcrusher, {arg bit_depth=10, bit_rate=20000;
 	ReplaceOut.ar(0, sigs);
 }).add;
 
-SynthDef(\verb, {arg mix=0.33, room=0.5, damp=0.5;
+SynthDef(\verb, {arg mix=0, room=0, damp=0;
 	var sigs;
 	sigs = [In.ar(0), In.ar(1)];
 	sigs = FreeVerb2.ar(sigs[0], sigs[1],
@@ -423,7 +422,7 @@ OSCdef.new(
 	{|msg, time, addr, port|
 		if (msg[1] == 1,
 			{z = Synth.tail(s, \verb);},
-			{z.free;});
+		{z.free;});
 	},
 	'/1/verb_on'
 );
@@ -479,7 +478,6 @@ b.action = {|val| save_presets_dialog.value};
 btns.put(1, b);
 
 
-
 ///// Rev up the finchesizers
 Task({
 	s.sync; // wait for the server
@@ -488,6 +486,7 @@ Task({
 		Synth.new(\finch, [\pan, pan.linlin(0, 3, -1, 1)])
 	});
 
+	// z = Synth.tail(s, \verb);
 	v = Synth.tail(s, \mastervolume);
 
 	// Load presets

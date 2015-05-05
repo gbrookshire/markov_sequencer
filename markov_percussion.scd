@@ -50,9 +50,9 @@ SynthDef(\click, {|out = 0, freq=440, decay=0.01, parm=1|
 // Flutter
 var tsk;
 tsk = Task({
-	var delta = 0.04;
+	var delta = 0.05;
 	loop {
-		Synth(\kick, [\bRelease, rrand(0.8, 1.5), \b_freq, rrand(20, 40)]);
+		Synth(\kick, [\bRelease, rrand(0.2, 0.5), \b_freq, rrand(20, 40)]);
 		delta = delta * rrand(1.0, 1.2);
 		if (delta > 0.15, {tsk.stop}, {});
 		delta.yield;
