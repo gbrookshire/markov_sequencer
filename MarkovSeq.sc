@@ -115,6 +115,20 @@ MarkovSeq{
 		});
 	}
 
+	loadTransMat{arg fname;
+		// Load a transition matrix from a csv file
+		var mat;
+		mat = CSVFileReader.read(fname);
+		// Convert string to float
+		mat = mat.collect(_.collect(_.asFloat));
+		// Make into 2D array
+		mat = Array2D.fromArray(node_values.size, node_values.size, mat.flat);
+		// Check sizes
+		if (mat.size != (node_values.size ** 2),
+			{"Transition matrix size doesn't match number of nodes!".postln;}, {});
+		transition_mat = mat;
+	}
+
 	setProb{arg prob, current, next;
 		transition_mat[current, next] = prob;
 	}
@@ -145,7 +159,7 @@ MarkovSeq{
 				probs = probs / sum(probs);
 				next_state = (0..(n_nodes - 1)).wchoose(probs);
 				current_state = next_state;
-				go_func.value(out_val); // Play sound
+				^go_func.value(out_val); // Execute function
 				// adrs_P5.sendMsg("s_new", \next_state, next_state);
 			}
 		);

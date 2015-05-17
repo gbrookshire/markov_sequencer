@@ -37,14 +37,6 @@ SynthDef(\sputter, {arg freq=440, wobble=0, resonate=0, decay=0.2, chaos=1.95, a
 }).add;
 )
 
-Synth(\sputter, [resonate:0.0, decay:0.04, amp:3])
-Synth(\twang)
-
-// Recording
-Server.default.makeGui
-s.prepareForRecord("/Users/gbrookshire/Desktop/markov_test.wav");
-s.record;
-s.stopRecording;
 
 (
 var goFunc1, nodeVals1;
@@ -191,3 +183,20 @@ m.transition_mat = Array2D.fromArray(7, 7, [
 	9,0,0,0,0,0,1,
 	9,0,0,0,0,0,0,
 ])
+
+
+
+
+
+
+
+
+
+Synth(\sputter, [resonate:0.0, decay:0.04, amp:3])
+Synth(\twang)
+
+// Recording
+Server.default.makeGui
+s.prepareForRecord("/Users/gbrookshire/Desktop/markov_test.wav");
+s.record;
+s.stopRecording;
