@@ -57,7 +57,7 @@ var presets, preset_dir;
 var rescale, descale;
 
 // IP address of the iPad
-adrs_touchOSC = NetAddr("10.150.101.35", 58100);
+adrs_touchOSC = NetAddr("10.150.103.182", 58100);
 
 // Which presets to load on starting up the script
 presets = [

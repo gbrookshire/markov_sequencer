@@ -5,7 +5,7 @@
 s.options.numInputBusChannels = 2;
 s.options.numOutputBusChannels = 4;
 s.boot;
-s.plotTree;
+// s.plotTree;
 s.meter;
 )
 
