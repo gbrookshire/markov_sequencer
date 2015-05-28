@@ -1,6 +1,7 @@
 var goFunc1, nodeVals1, mrkv1, final1;
 var goFunc2, nodeVals2, mrkv2, final2;
 var goFunc3, nodeVals3, mrkv3, final3;
+var markovArr;
 var projectDir;
 var tempo;
 
@@ -14,6 +15,7 @@ projectDir = thisProcess.nowExecutingPath.dirname;
 	// between this note and the following note.
 	var fnc;
 	fnc = {
+		// [1, 1, 2].choose * abs(rrand(1 - jit, 1 + jit)) * temp / divisor
 		abs(rrand(1 - jit, 1 + jit)) * temp / divisor
 	};
 	fnc
@@ -83,62 +85,98 @@ final3 = [
 mrkv1 = MarkovSeq(goFunc1, nodeVals1);
 mrkv2 = MarkovSeq(goFunc2, nodeVals2);
 mrkv3 = MarkovSeq(goFunc3, nodeVals3);
-~markovArr = [mrkv1, mrkv2, mrkv3];
-
-mrkv1.timing_func = ~devTimeFunc.(2.0 * ~devScaler, 1.2, 3);
-mrkv2.timing_func = ~devTimeFunc.(2.0 * ~devScaler, 1.2, 4);
-mrkv3.timing_func = ~devTimeFunc.(2.0 * ~devScaler, 1.2, 4);
-
-mrkv1.transition_mat = Array2D.fromArray(
-	nodeVals1.size,
-	nodeVals1.size,
-	final1);
-mrkv2.transition_mat = Array2D.fromArray(
-	nodeVals2.size,
-	nodeVals2.size,
-	final2);
-mrkv3.transition_mat = Array2D.fromArray(
-	nodeVals3.size,
-	nodeVals3.size,
-	final3);
 
 
 // Start the chains
 Task({
 	s.sync; // wait for the server
+	mrkv1.timing_func = ~devTimeFunc.(2.0 * ~devScaler, tempo, 2);
+	mrkv2.timing_func = ~devTimeFunc.(2.0 * ~devScaler, tempo, 2);
+	mrkv3.timing_func = ~devTimeFunc.(2.0 * ~devScaler, tempo, 2);
+	mrkv1.run;
+	mrkv2.run;
+	mrkv3.run;
 }).play;
 
-// A button in TouchOSC to turn the chains on or off
-OSCdef.new(
-	\markov2_run_resp,
-	{|msg, time, addr, port|
-		if(msg[1] == 1,
-			{~markovArr.collect({arg chain; chain.run})},
-			{~markovArr.collect({arg chain; chain.pause})}
-		);
-	},
-	'/3/toggle1'
-);
 
+// Start developing from noisy to clean sounds
+Task({
+	var noise_strength, noise_mat, first;
+	noise_strength = 6.0;
+	first = true;
 
-// A slider to change the sound.
-OSCdef.new(
-	\markov2_tone_resp,
-	{|msg, time, addr, port|
-		~devScaler = 1 - (msg[1]);
-	},
-	'/3/markov2_tone'
-);
+	loop {
+		var delta = 1.0;
+		noise_strength.postln;
+		~devScaler.postln;
 
-// A slider to change the timing
-OSCdef.new(
-	\markov2_timing_resp,
-	{|msg, time, addr, port|
-		var tempo = 0.2 + (4 * ((1 - msg[1]) ** 2));
+		// Add the transition matrix to a matrix of noise
+		mrkv1.transition_mat = Array2D.fromArray(
+			nodeVals1.size,
+			nodeVals1.size,
+		Array.rand(nodeVals1.size**2, 0, noise_strength) + final1);
+		mrkv2.transition_mat = Array2D.fromArray(
+			nodeVals2.size,
+			nodeVals2.size,
+		Array.rand(nodeVals2.size**2, 0, noise_strength) + final2);
+		mrkv3.transition_mat = Array2D.fromArray(
+			nodeVals3.size,
+			nodeVals3.size,
+		Array.rand(nodeVals2.size**2, 0, noise_strength) + final3);
+
+		// mrkv1.timing_func = ~devTimeFunc.(2.0 * ~devScaler, tempo, 3);
+		// mrkv2.timing_func = ~devTimeFunc.(2.0 * ~devScaler, tempo, 4);
+		// mrkv3.timing_func = ~devTimeFunc.(2.0 * ~devScaler, tempo, 6);
+
+		// Don't make any changes at first
+		if (first, {30.wait; first=false;}, {});
+
+		noise_strength = noise_strength - 0.1;
+		~devScaler = ~devScaler * 0.95;
+		if (~devScaler < 0, {~devScaler = 0}, {});
+		if (noise_strength < 0, {noise_strength = 0}, {});
+		delta.yield;
+	}
+}).play;
+
+// Change the density of notes by varying the timing function.
+Task({
+	var dens;
+	dens = [
+		2, 1.5, 1, 0.8, 0.6, 0.4,
+		0.2, 0.15, 0.3, 0.4, 0.25,
+	0.4, 0.7, 0.9, 1.2];
+	dens = tempo * dens;
+	10.wait;
+	dens.do{|val|
+		tempo = val;
 		mrkv1.timing_func = ~devTimeFunc.(2.0 * ~devScaler, tempo, 3);
 		mrkv2.timing_func = ~devTimeFunc.(2.0 * ~devScaler, tempo, 4);
 		mrkv3.timing_func = ~devTimeFunc.(2.0 * ~devScaler, tempo, 4);
-	},
-	'/3/markov2_timing'
-);
 
+		5.wait;
+	};
+}).play;
+
+
+
+
+// // TESTING
+// ~devScaler = 0.000001;
+// mrkv1.transition_mat = Array2D.fromArray(
+// 	nodeVals1.size,
+// 	nodeVals1.size,
+// final1);
+// mrkv2.transition_mat = Array2D.fromArray(
+// 	nodeVals2.size,
+// 	nodeVals2.size,
+// final2);
+// mrkv3.transition_mat = Array2D.fromArray(
+// 	nodeVals3.size,
+// 	nodeVals3.size,
+// final3);
+//
+//
+//
+//
+//

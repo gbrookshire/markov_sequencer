@@ -13,3 +13,7 @@ To do:
     Remove the Task() call at the end of finchesizer.scd?
     Some silent responses at the beginning of develop.
         No silent responses at the end.
+    Markov II: 
+        The second voice -- the marimba-like one -- gets pitched way too fast
+    Markov I:
+        Less variability in fuzziness.
