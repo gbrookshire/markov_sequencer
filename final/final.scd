@@ -31,11 +31,11 @@ s.meter;
 
 // Run the markov chain piece that is inspired by vocal development.
 // These lines change the values (but use the GUI if possible).
-~devScaler = 0.1; // Reduce to 0 for more pitched sounds
+~devScaler = 1; // Reduce to 0 for more pitched sounds
 ~markovArr.collect({arg chain; chain.run});
 ~markovArr.collect({arg chain; chain.pause});
 (
-var tempo = 0.3; // Smaller tempo means a more dense sound.
+var tempo = 1.0; // Smaller tempo means a more dense sound.
 ~markovArr.collect({arg chain;
 	chain.timing_func = ~devTimeFunc.(2.0 * ~devScaler, tempo, 3);
 });
