@@ -66,10 +66,10 @@ var presets, preset_dir;
 var rescale, descale;
 
 // IP address of the iPad
-adrs_touchOSC = NetAddr("10.150.103.77", 58100);
+adrs_touchOSC = NetAddr("10.150.106.165", 58100);
 // Which presets to load on starting up the script
 preset_dir = "/Users/gbrookshire/Documents/projects/music/sc/markov_sequencer/perform_presets/";
-presets = ["blank.yaml", "oboe_c.yaml", "oboe_c_new.yaml", "beginning_withvolume.yaml"];
+presets = ["blank.yaml", "oboe_c.yaml", "b-flat.yaml", "low_sound.yaml", "blips_1.yaml"];
 
 n_synths = 4;
 nPresets = 6;
@@ -298,7 +298,7 @@ SynthDef(\verb, {arg mix=0, room=0, damp=0;
 SynthDef(\mastervolume, {arg vol=0;
 	var sigs;
 	sigs = [In.ar(0), In.ar(1)];
-	sigs = sigs * vol.lag(0.2);
+	sigs = sigs * (vol.lag(0.2) ** 2);
 	ReplaceOut.ar(0, sigs);
 }).add;
 
